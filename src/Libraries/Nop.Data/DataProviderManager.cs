@@ -1,5 +1,6 @@
 ﻿using Nop.Core;
 using Nop.Data.Data;
+using Nop.Data.DataProviders;
 
 namespace Nop.Data
 {
@@ -17,14 +18,15 @@ namespace Nop.Data
         {
             get
             {
-                var dataConnection = new NopDataConnection();
+                var dataSettings = DataSettingsManager.LoadSettings();
 
-                switch (dataConnection.ProviderType)
+
+                switch (dataSettings.DataProvider)
                 {
                     case DataProviderType.SqlServer:
-                        return new MsSqlDataProvider(dataConnection);
+                        return new MsSqlDataProvider();
                     default:
-                        throw new NopException($"Not supported data provider name: '{dataConnection.DataProvider}'");
+                        throw new NopException($"Not supported data provider name: '{dataSettings.DataProvider}'");
                 }
             }
         }

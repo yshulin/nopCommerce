@@ -18,7 +18,7 @@ using Nop.Web.Areas.Admin.Factories;
 using Nop.Web.Areas.Admin.Models.Common;
 using Nop.Web.Framework.Controllers;
 using Nop.Web.Framework;
-using Nop.Core.Data;
+using Nop.Data;
 
 namespace Nop.Web.Areas.Admin.Controllers
 {

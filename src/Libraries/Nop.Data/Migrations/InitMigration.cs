@@ -1,8 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-using FluentMigrator;
-using Nop.Core.Data;
+﻿using FluentMigrator;
 
 namespace Nop.Data.Migrations
 {

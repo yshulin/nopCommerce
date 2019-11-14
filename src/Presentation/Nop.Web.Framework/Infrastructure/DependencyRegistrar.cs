@@ -18,6 +18,7 @@ using Nop.Core.Infrastructure.DependencyManagement;
 using Nop.Core.Redis;
 using Nop.Data;
 using Nop.Data.Data;
+using Nop.Data.DataProviders;
 using Nop.Services.Affiliates;
 using Nop.Services.Authentication;
 using Nop.Services.Authentication.External;
@@ -86,31 +87,8 @@ namespace Nop.Web.Framework.Infrastructure
             builder.RegisterType<UserAgentHelper>().As<IUserAgentHelper>().InstancePerLifetimeScope();
 
             //data layer
-            //TODO 239
             builder.RegisterType<DataProviderManager>().As<IDataProviderManager>().InstancePerDependency();
             builder.Register(context => context.Resolve<IDataProviderManager>().DataProvider).As<IDataProvider>().InstancePerDependency();
-
-            if(DataSettingsManager.LoadSettings() is DataSettings dataSettings)
-            {
-                switch (dataSettings.DataProvider)
-                {
-                    case DataProviderType.SqlServer:
-                        builder.RegisterType<SqlServerDataProvider>().As<IDataProvider>().InstancePerDependency();
-                        break;
-                    case DataProviderType.Firebird:
-                    case DataProviderType.MySql:
-                    case DataProviderType.Oracle:
-                    case DataProviderType.PostgreSQL:
-                    case DataProviderType.SQLite:
-                    case DataProviderType.Unknown:
-                    default:
-                        break;
-                }
-            }
-            else
-            {
-                builder.RegisterType<NopDataProvider>().As<IDataProvider>().InstancePerDependency();
-            }
 
             //repositories
             builder.RegisterGeneric(typeof(EfRepository<>)).As(typeof(IRepository<>)).InstancePerLifetimeScope();

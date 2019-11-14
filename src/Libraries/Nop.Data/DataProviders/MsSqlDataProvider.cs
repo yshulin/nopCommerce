@@ -4,21 +4,28 @@ using System.Linq;
 using System.Threading;
 using LinqToDB.Data;
 using Nop.Core;
-using Nop.Core.Data;
 
-namespace Nop.Data
+namespace Nop.Data.DataProviders
 {
-    /// <summary>
-    /// Represents SQL Server data provider
-    /// </summary>
-    public partial class SqlServerDataProvider : IDataProvider
+    public partial class MsSqlDataProvider: IDataProvider
     {
-        public SqlServerDataProvider()
-        {
+        private readonly DataConnection _dataConnection;
 
+        public MsSqlDataProvider()
+        {
+            _dataConnection = new DataConnection();
         }
 
         #region Utilities
+
+        /// <summary>
+        /// Check whether backups are supported
+        /// </summary>
+        protected void CheckBackupSupported()
+        {
+            if (!BackupSupported)
+                throw new DataException("This database does not support backup");
+        }
 
         /// <summary>
         /// Checks if the specified database exists, returns true if database exists
@@ -30,10 +37,7 @@ namespace Nop.Data
             try
             {
                 //just try to connect
-                using (var db = new DbNopCommerce())
-                {
-                    db.Connection.Open();
-                }
+                _dataConnection.Connection.Open();
 
                 return true;
             }
@@ -47,9 +51,10 @@ namespace Nop.Data
 
         #region Methods
 
+
         public virtual void CreateDatabase(string collation, int triesToConnect = 10)
         {
-            using (var db = new DbNopCommerce())
+            using (var db = new NopDataConnection())
             {
                 //parse database name
                 var databaseName = db.Connection.Database;
@@ -64,7 +69,7 @@ namespace Nop.Data
 
             }
 
-            using (var db = new DbNopCommerce())
+            using (var db = new NopDataConnection())
             {
                 //try connect
                 if (triesToConnect <= 0)
@@ -120,71 +125,12 @@ namespace Nop.Data
         }
 
         /// <summary>
-        /// Creates a backup of the database
+        /// Get a support database parameter object (used by stored procedures)
         /// </summary>
-        public virtual void BackupDatabase(string fileName)
+        /// <returns>Parameter</returns>
+        public DataParameter GetParameter()
         {
-            if (!BackupSupported)
-                throw new DataException("This database does not support backup");
-
-            using (var db = new DbNopCommerce())
-            {
-                db.Execute($"BACKUP DATABASE [{db.Connection.Database}] TO DISK = '{fileName}' WITH FORMAT");
-            }
-        }
-
-        /// <summary>
-        /// Gets command for restores the database from a backup
-        /// </summary>
-        /// <param name="backupFileName"></param>
-        /// <returns></returns>
-        public virtual void RestoreDatabase(string backupFileName)
-        {
-            if (!BackupSupported)
-                throw new DataException("This database does not support backup");
-
-            using (var db = new DbNopCommerce())
-            {
-                db.Execute($@"
-                        DECLARE @ErrorMessage NVARCHAR(4000)
-                        ALTER DATABASE [{db.Connection.Database}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE
-                        BEGIN TRY
-                        RESTORE DATABASE [{db.Connection.Database}] FROM DISK = '{backupFileName}' WITH REPLACE
-                        END TRY
-                        BEGIN CATCH
-                        SET @ErrorMessage = ERROR_MESSAGE()
-                        END CATCH
-                        ALTER DATABASE [{db.Connection.Database}] SET MULTI_USER WITH ROLLBACK IMMEDIATE
-                        IF (@ErrorMessage is not NULL)
-                        BEGIN
-                        RAISERROR (@ErrorMessage, 16, 1)
-                        END");
-            }
-        }
-
-        /// <summary>
-        /// Re-index database tables
-        /// </summary>
-        public virtual void ReIndexTables()
-        {
-            using (var db = new DbNopCommerce())
-            {
-                db.Execute($@"
-                        DECLARE @TableName sysname 
-                        DECLARE cur_reindex CURSOR FOR
-                        SELECT table_name
-                        FROM [{db.Connection.Database}].information_schema.tables
-                        WHERE table_type = 'base table'
-                        OPEN cur_reindex
-                        FETCH NEXT FROM cur_reindex INTO @TableName
-                        WHILE @@FETCH_STATUS = 0
-                            BEGIN
-                          exec('ALTER INDEX ALL ON [' + @TableName + '] REBUILD')
-                                FETCH NEXT FROM cur_reindex INTO @TableName
-                            END
-                        CLOSE cur_reindex
-                        DEALLOCATE cur_reindex");
-            }
+            return new DataParameter();
         }
 
         /// <summary>
@@ -194,14 +140,12 @@ namespace Nop.Data
         /// <returns>Integer identity; null if cannot get the result</returns>
         public virtual int? GetTableIdent<T>() where T : BaseEntity
         {
-            using (var db = new DbNopCommerce())
-            {
-                var tableName = db.GetTable<T>().TableName;
+            var tableName = _dataConnection.GetTable<T>().TableName;
 
-                var result = db.Query<decimal?>($"SELECT IDENT_CURRENT('[{tableName}]') as Value").FirstOrDefault();
+            var result = _dataConnection.Query<decimal?>($"SELECT IDENT_CURRENT('[{tableName}]') as Value")
+                .FirstOrDefault();
 
-                return result.HasValue ? Convert.ToInt32(result) : 1;
-            }
+            return result.HasValue ? Convert.ToInt32(result) : 1;
         }
 
         /// <summary>
@@ -215,20 +159,85 @@ namespace Nop.Data
             if (!currentIdent.HasValue || ident <= currentIdent.Value)
                 return;
 
-            using (var db = new DbNopCommerce())
-            {
-                var tableName = db.GetTable<T>().TableName;
-                db.Execute($"DBCC CHECKIDENT([{tableName}], RESEED, {ident})");
-            }
+            var tableName = _dataConnection.GetTable<T>().TableName;
+
+            _dataConnection.Execute($"DBCC CHECKIDENT([{tableName}], RESEED, {ident})");
         }
 
         /// <summary>
-        /// Get a support database parameter object (used by stored procedures)
+        /// Creates a backup of the database
         /// </summary>
-        /// <returns>Parameter</returns>
-        public virtual DataParameter GetParameter()
+        public virtual void BackupDatabase(string fileName)
         {
-            return new DataParameter();
+            CheckBackupSupported();
+            //var fileName = _fileProvider.Combine(GetBackupDirectoryPath(), $"database_{DateTime.Now:yyyy-MM-dd-HH-mm-ss}_{CommonHelper.GenerateRandomDigitCode(10)}.{NopCommonDefaults.DbBackupFileExtension}");
+
+            var commandText = $"BACKUP DATABASE [{_dataConnection.Connection.Database}] TO DISK = '{fileName}' WITH FORMAT";
+            _dataConnection.Execute(commandText);
+        }
+
+        /// <summary>
+        /// Restores the database from a backup
+        /// </summary>
+        /// <param name="backupFileName">The name of the backup file</param>
+        public virtual void RestoreDatabase(string backupFileName)
+        {
+            CheckBackupSupported();
+
+            var commandText = string.Format(
+                "DECLARE @ErrorMessage NVARCHAR(4000)\n" +
+                "ALTER DATABASE [{0}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE\n" +
+                "BEGIN TRY\n" +
+                "RESTORE DATABASE [{0}] FROM DISK = '{1}' WITH REPLACE\n" +
+                "END TRY\n" +
+                "BEGIN CATCH\n" +
+                "SET @ErrorMessage = ERROR_MESSAGE()\n" +
+                "END CATCH\n" +
+                "ALTER DATABASE [{0}] SET MULTI_USER WITH ROLLBACK IMMEDIATE\n" +
+                "IF (@ErrorMessage is not NULL)\n" +
+                "BEGIN\n" +
+                "RAISERROR (@ErrorMessage, 16, 1)\n" +
+                "END",
+                _dataConnection.Connection.Database,
+                backupFileName);
+
+            _dataConnection.Execute(commandText);
+        }
+
+        /// <summary>
+        /// Re-index database tables
+        /// </summary>
+        public virtual void ReIndexTables()
+        {
+            var commandText = $@"
+                        DECLARE @TableName sysname 
+                        DECLARE cur_reindex CURSOR FOR
+                        SELECT table_name
+                        FROM [{_dataConnection.Connection.Database}].information_schema.tables
+                        WHERE table_type = 'base table'
+                        OPEN cur_reindex
+                        FETCH NEXT FROM cur_reindex INTO @TableName
+                        WHILE @@FETCH_STATUS = 0
+                            BEGIN
+                          exec('ALTER INDEX ALL ON [' + @TableName + '] REBUILD')
+                                FETCH NEXT FROM cur_reindex INTO @TableName
+                            END
+                        CLOSE cur_reindex
+                        DEALLOCATE cur_reindex";
+
+            _dataConnection.Execute(commandText);
+        }
+
+        /// <summary>
+        /// Loads the original copy of the entity
+        /// </summary>
+        /// <typeparam name="TEntity">Entity type</typeparam>
+        /// <param name="entity">Entity</param>
+        /// <returns>Copy of the passed entity</returns>
+        public TEntity LoadOriginalCopy<TEntity>(TEntity entity) where TEntity : BaseEntity
+        {
+            var entities = _dataConnection.GetTable<TEntity>();
+            return entities.FirstOrDefault(e => e.Id == Convert.ToInt32(entity.Id));
         }
 
         #endregion
@@ -238,12 +247,12 @@ namespace Nop.Data
         /// <summary>
         /// Gets a value indicating whether this data provider supports backup
         /// </summary>
-        public virtual bool BackupSupported => true;
+        public bool BackupSupported { get; } = true;
 
         /// <summary>
         /// Gets a maximum length of the data for HASHBYTES functions, returns 0 if HASHBYTES function is not supported
         /// </summary>
-        public virtual int SupportedLengthOfBinaryHash => 8000; //for SQL Server 2008 and above HASHBYTES function has a limit of 8000 characters.
+        public int SupportedLengthOfBinaryHash { get; } = 8000; //for SQL Server 2008 and above HASHBYTES function has a limit of 8000 characters.
 
         #endregion
     }

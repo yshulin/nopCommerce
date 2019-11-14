@@ -9,7 +9,9 @@ namespace Nop.Data
     public partial interface IDataProvider
     {
         #region Methods
-        
+
+        void CreateDatabase(string collation, int triesToConnect = 10);
+
         /// <summary>
         /// Initialize database
         /// </summary>

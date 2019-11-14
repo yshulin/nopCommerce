@@ -1,9 +1,9 @@
 ﻿using System;
 using System.Linq;
-using System.Reflection;
 using LinqToDB;
 using LinqToDB.Data;
 using LinqToDB.Mapping;
+using Nop.Core;
 using Nop.Core.Domain.Affiliates;
 using Nop.Core.Domain.Blogs;
 using Nop.Core.Domain.Catalog;
@@ -30,7 +30,6 @@ using Nop.Core.Domain.Tax;
 using Nop.Core.Domain.Topics;
 using Nop.Core.Domain.Vendors;
 using Nop.Core.Infrastructure;
-using Nop.Data.Data;
 
 namespace Nop.Data
 {
@@ -39,13 +38,9 @@ namespace Nop.Data
     /// </summary>
     public class NopDataConnection : DataConnection
     {
-        public DbNopCommerce() : base()
+        public NopDataConnection() : base()
         {
  			if (Singleton<MappingSchema>.Instance != null)
-                AddMappingSchema(Singleton<MappingSchema>.Instance);
-        }
-        {
-            if (Singleton<MappingSchema>.Instance != null)
                 AddMappingSchema(Singleton<MappingSchema>.Instance);
         }
 
