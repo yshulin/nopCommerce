@@ -11,8 +11,14 @@ namespace Nop.Core.Data
     {
         #region Ctor
 
-        public DataSettings()
+        public DataSettings() : this(DataProviderType.Unknown)
         {
+
+        }
+
+        public DataSettings(DataProviderType dataProviderType)
+        {
+            DataProvider = dataProviderType;
             RawDataSettings = new Dictionary<string, string>();
         }
 

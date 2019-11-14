@@ -30,186 +30,20 @@ using Nop.Core.Domain.Tasks;
 using Nop.Core.Domain.Tax;
 using Nop.Core.Domain.Topics;
 using Nop.Core.Domain.Vendors;
+using Nop.Core.Infrastructure;
 
 namespace Nop.Data
 {
     public class DbNopCommerce : DataConnection
     {
-        public DbNopCommerce() : base("nopCommerce") { }
+        public DbNopCommerce() : base()
+        {
+        }
 
         public TEntity LoadOriginalCopy<TEntity>(TEntity entity) where TEntity : BaseEntity
         {
             var entities = GetTable<TEntity>();
             return entities.FirstOrDefault(e => e.Id == Convert.ToInt32(entity.Id));
-        }
-
-        /// <summary>
-        /// Check whether backups are supported
-        /// </summary>
-        protected virtual void CheckBackupSupported()
-        {
-            if (!(DefaultSettings.ConnectionStrings.FirstOrDefault(p => p.Name == ConfigurationString) is ConnectionStringConfigurationProvider connectionStringSettings))
-                throw new ArgumentNullException(nameof(connectionStringSettings));
-
-            switch (connectionStringSettings.ProviderType)
-            {
-                case DataProviderType.SqlServer:
-                    return;
-                default:
-                    throw new DataException("This database does not support backup");
-            }
-        }
-
-        /// <summary>
-        /// Get the current identity value
-        /// </summary>
-        /// <typeparam name="T">Entity</typeparam>
-        /// <returns>Integer identity; null if cannot get the result</returns>
-        public virtual int? GetTableIdent<T>() where T : BaseEntity
-        {
-            if(!(DefaultSettings.ConnectionStrings.FirstOrDefault(p => p.Name == ConfigurationString) is ConnectionStringConfigurationProvider connectionStringSettings))
-                throw new ArgumentNullException(nameof(connectionStringSettings));
-
-            switch (connectionStringSettings.ProviderType)
-            {
-                case DataProviderType.SqlServer:
-                    var tableName = GetTable<T>().TableName;
-
-                    var result = this.Query<decimal?>($"SELECT IDENT_CURRENT('[{tableName}]') as Value").FirstOrDefault();
-
-                    return result.HasValue ? Convert.ToInt32(result) : 1;
-                default:
-                    throw new NotSupportedException(connectionStringSettings.ProviderName);
-            }
-        }
-
-        /// <summary>
-        /// Set table identity (is supported)
-        /// </summary>
-        /// <typeparam name="T">Entity</typeparam>
-        /// <param name="ident">Identity value</param>
-        public virtual void SetTableIdent<T>(int ident) where T : BaseEntity
-        {
-            var currentIdent = GetTableIdent<T>();
-            if (!currentIdent.HasValue || ident <= currentIdent.Value)
-                return;
-
-            if (!(DefaultSettings.ConnectionStrings.FirstOrDefault(p => p.Name == ConfigurationString) is ConnectionStringConfigurationProvider connectionStringSettings))
-                throw new ArgumentNullException(nameof(connectionStringSettings));
-
-            switch (connectionStringSettings.ProviderType)
-            {
-                case DataProviderType.SqlServer:
-                    var tableName = GetTable<T>().TableName;
-
-                    this.Execute($"DBCC CHECKIDENT([{tableName}], RESEED, {ident})");
-
-                    break;
-
-                default:
-                    throw new NotSupportedException(connectionStringSettings.ProviderName);
-            }
-        }
-
-        /// <summary>
-        /// Creates a backup of the database
-        /// </summary>
-        public virtual void BackupDatabase(string fileName)
-        {
-            CheckBackupSupported();
-            //var fileName = _fileProvider.Combine(GetBackupDirectoryPath(), $"database_{DateTime.Now:yyyy-MM-dd-HH-mm-ss}_{CommonHelper.GenerateRandomDigitCode(10)}.{NopCommonDefaults.DbBackupFileExtension}");
-
-            if (!(DefaultSettings.ConnectionStrings.FirstOrDefault(p => p.Name == ConfigurationString) is ConnectionStringConfigurationProvider connectionStringSettings))
-                throw new ArgumentNullException(nameof(connectionStringSettings));
-
-            switch (connectionStringSettings.ProviderType)
-            {
-                case DataProviderType.SqlServer:
-                    var commandText = $"BACKUP DATABASE [{Product.DatabaseName}] TO DISK = '{fileName}' WITH FORMAT";
-                    this.Execute(commandText);
-
-                    break;
-
-                default:
-                    throw new NotSupportedException(connectionStringSettings.ProviderName);
-            }
-        }
-
-        /// <summary>
-        /// Restores the database from a backup
-        /// </summary>
-        /// <param name="backupFileName">The name of the backup file</param>
-        public virtual void RestoreDatabase(string backupFileName)
-        {
-            CheckBackupSupported();
-
-            if (!(DefaultSettings.ConnectionStrings.FirstOrDefault(p => p.Name == ConfigurationString) is ConnectionStringConfigurationProvider connectionStringSettings))
-                throw new ArgumentNullException(nameof(connectionStringSettings));
-
-            switch (connectionStringSettings.ProviderType)
-            {
-                case DataProviderType.SqlServer:
-                    var commandText = string.Format(
-                        "DECLARE @ErrorMessage NVARCHAR(4000)\n" +
-                        "ALTER DATABASE [{0}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE\n" +
-                        "BEGIN TRY\n" +
-                        "RESTORE DATABASE [{0}] FROM DISK = '{1}' WITH REPLACE\n" +
-                        "END TRY\n" +
-                        "BEGIN CATCH\n" +
-                        "SET @ErrorMessage = ERROR_MESSAGE()\n" +
-                        "END CATCH\n" +
-                        "ALTER DATABASE [{0}] SET MULTI_USER WITH ROLLBACK IMMEDIATE\n" +
-                        "IF (@ErrorMessage is not NULL)\n" +
-                        "BEGIN\n" +
-                        "RAISERROR (@ErrorMessage, 16, 1)\n" +
-                        "END",
-                        Product.DatabaseName,
-                        backupFileName);
-
-                    this.Execute(commandText);
-
-                    break;
-
-                default:
-                    throw new NotSupportedException(connectionStringSettings.ProviderName);
-            }
-        }
-
-        /// <summary>
-        /// Re-index database tables
-        /// </summary>
-        public virtual void ReIndexTables()
-        {
-            if (!(DefaultSettings.ConnectionStrings.FirstOrDefault(p => p.Name == ConfigurationString) is ConnectionStringConfigurationProvider connectionStringSettings))
-                throw new ArgumentNullException(nameof(connectionStringSettings));
-
-            switch (connectionStringSettings.ProviderType)
-            {
-                case DataProviderType.SqlServer:
-
-                    var commandText = $@"
-                        DECLARE @TableName sysname 
-                        DECLARE cur_reindex CURSOR FOR
-                        SELECT table_name
-                        FROM [{Product.DatabaseName}].information_schema.tables
-                        WHERE table_type = 'base table'
-                        OPEN cur_reindex
-                        FETCH NEXT FROM cur_reindex INTO @TableName
-                        WHILE @@FETCH_STATUS = 0
-                            BEGIN
-                          exec('ALTER INDEX ALL ON [' + @TableName + '] REBUILD')
-                                FETCH NEXT FROM cur_reindex INTO @TableName
-                            END
-                        CLOSE cur_reindex
-                        DEALLOCATE cur_reindex";
-
-                    this.Execute(commandText);
-
-                    break;
-
-                default:
-                    throw new NotSupportedException(connectionStringSettings.ProviderName);
-            }
         }
 
         public ITable<PictureBinary> PictureBinary => GetTable<PictureBinary>();

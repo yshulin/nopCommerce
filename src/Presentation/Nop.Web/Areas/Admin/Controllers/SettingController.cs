@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection;
 using Nop.Core;
 using Nop.Core.Configuration;
+using Nop.Core.Data;
 using Nop.Core.Domain;
 using Nop.Core.Domain.Blogs;
 using Nop.Core.Domain.Catalog;
@@ -59,6 +60,7 @@ namespace Nop.Web.Areas.Admin.Controllers
         private readonly IAddressService _addressService;
         private readonly ICustomerActivityService _customerActivityService;
         private readonly ICustomerService _customerService;
+        private readonly IDataProvider _dataProvider;
         private readonly IEncryptionService _encryptionService;
         private readonly IFulltextService _fulltextService;
         private readonly IGenericAttributeService _genericAttributeService;
@@ -87,6 +89,7 @@ namespace Nop.Web.Areas.Admin.Controllers
         public SettingController(IAddressService addressService,
             ICustomerActivityService customerActivityService,
             ICustomerService customerService,
+            IDataProvider dataProvider,
             IEncryptionService encryptionService,
             IFulltextService fulltextService,
             IGenericAttributeService genericAttributeService,
@@ -111,6 +114,7 @@ namespace Nop.Web.Areas.Admin.Controllers
             _addressService = addressService;
             _customerActivityService = customerActivityService;
             _customerService = customerService;
+            _dataProvider = dataProvider;
             _encryptionService = encryptionService;
             _fulltextService = fulltextService;
             _genericAttributeService = genericAttributeService;
@@ -799,7 +803,8 @@ namespace Nop.Web.Areas.Admin.Controllers
                 {
                     try
                     {
-                        new DbNopCommerce().SetTableIdent<Order>(model.OrderIdent.Value);
+
+                        _dataProvider.SetTableIdent<Order>(model.OrderIdent.Value);
                     }
                     catch (Exception exc)
                     {

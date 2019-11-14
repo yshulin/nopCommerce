@@ -15,6 +15,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Nop.Core\Nop.Core.csproj" />
+    <PackageReference Include="FluentMigrator" Version="3.2.1" />
   </ItemGroup>
 
 </Project>

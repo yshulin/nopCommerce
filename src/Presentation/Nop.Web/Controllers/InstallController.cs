@@ -296,6 +296,11 @@ namespace Nop.Web.Controllers
             if (!ModelState.IsValid) 
                 return View(model);
 
+            //save settings
+            DataSettingsManager.SaveSettings(new DataSettings(model.DataProvider), _fileProvider);
+
+            var dataProvider = EngineContext.Current.Resolve<IDataProvider>();
+
             try
             {
                 var connectionString = string.Empty;
@@ -329,9 +334,15 @@ namespace Nop.Web.Controllers
                         {
                             //create database
                             var collation = model.UseCustomCollation ? model.Collation : string.Empty;
-                            var errorCreatingDatabase = CreateDatabase(connectionString, collation);
-                            if (!string.IsNullOrEmpty(errorCreatingDatabase))
-                                throw new Exception(errorCreatingDatabase);
+                            try
+                            {
+                                dataProvider.CreateDatabase(collation);
+
+                            }
+                            catch (Exception ex)
+                            {
+                                throw new Exception(string.Format(_locService.GetResource("DatabaseCreationError"), ex.Message));
+                            }
                         }
                     }
                     else
@@ -350,7 +361,7 @@ namespace Nop.Web.Controllers
                 }, _fileProvider);
 
                 //initialize database
-                EngineContext.Current.Resolve<IDataProvider>().InitializeDatabase();
+                dataProvider.InitializeDatabase();
 
                 //now resolve installation service
                 var installationService = EngineContext.Current.Resolve<IInstallationService>();
@@ -414,6 +425,11 @@ namespace Nop.Web.Controllers
 
             return View(model);
         }
+
+        //public virtual IActionResult InstallationComplete() 
+        //{ 
+            
+        //}
 
         public virtual IActionResult ChangeLanguage(string language)
         {

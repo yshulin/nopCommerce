@@ -85,7 +85,28 @@ namespace Nop.Web.Framework.Infrastructure
             builder.RegisterType<UserAgentHelper>().As<IUserAgentHelper>().InstancePerLifetimeScope();
 
             //data layer
-            builder.RegisterType<NopDataProvider>().As<IDataProvider>().InstancePerDependency();
+            //TODO 239
+            if(DataSettingsManager.LoadSettings() is DataSettings dataSettings)
+            {
+                switch (dataSettings.DataProvider)
+                {
+                    case DataProviderType.SqlServer:
+                        builder.RegisterType<SqlServerDataProvider>().As<IDataProvider>().InstancePerDependency();
+                        break;
+                    case DataProviderType.Firebird:
+                    case DataProviderType.MySql:
+                    case DataProviderType.Oracle:
+                    case DataProviderType.PostgreSQL:
+                    case DataProviderType.SQLite:
+                    case DataProviderType.Unknown:
+                    default:
+                        break;
+                }
+            }
+            else
+            {
+                builder.RegisterType<NopDataProvider>().As<IDataProvider>().InstancePerDependency();
+            }
 
             //repositories
             builder.RegisterGeneric(typeof(EfRepository<>)).As(typeof(IRepository<>)).InstancePerLifetimeScope();
