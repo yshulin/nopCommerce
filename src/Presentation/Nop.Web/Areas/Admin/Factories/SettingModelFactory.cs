@@ -22,6 +22,7 @@ using Nop.Core.Domain.Shipping;
 using Nop.Core.Domain.Tax;
 using Nop.Core.Domain.Vendors;
 using Nop.Data;
+using Nop.Data.Data;
 using Nop.Services;
 using Nop.Services.Common;
 using Nop.Services.Configuration;

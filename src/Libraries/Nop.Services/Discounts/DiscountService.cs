@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using Nop.Core;
 using Nop.Core.Caching;
-using Nop.Core.Data;
 using Nop.Core.Domain.Customers;
 using Nop.Core.Domain.Discounts;
 using Nop.Core.Domain.Orders;
@@ -30,6 +29,7 @@ namespace Nop.Services.Discounts
         private readonly ILocalizationService _localizationService;
         private readonly IProductService _productService;
         private readonly IRepository<Discount> _discountRepository;
+        private readonly IRepository<DiscountMapping> _discountMappingRepository;
         private readonly IRepository<DiscountRequirement> _discountRequirementRepository;
         private readonly IRepository<DiscountUsageHistory> _discountUsageHistoryRepository;
         private readonly IRepository<Order> _orderRepository;
@@ -46,6 +46,7 @@ namespace Nop.Services.Discounts
             ILocalizationService localizationService,
             IProductService productService,
             IRepository<Discount> discountRepository,
+            IRepository<DiscountMapping> discountMappingRepository,
             IRepository<DiscountRequirement> discountRequirementRepository,
             IRepository<DiscountUsageHistory> discountUsageHistoryRepository,
             IRepository<Order> orderRepository,
@@ -58,6 +59,7 @@ namespace Nop.Services.Discounts
             _localizationService = localizationService;
             _productService = productService;
             _discountRepository = discountRepository;
+            _discountMappingRepository = discountMappingRepository;
             _discountRequirementRepository = discountRequirementRepository;
             _discountUsageHistoryRepository = discountUsageHistoryRepository;
             _orderRepository = orderRepository;
@@ -218,10 +220,9 @@ namespace Nop.Services.Discounts
         /// <returns>List of discounts</returns>
         public virtual IList<Discount> GetAppliedDiscounts<T>(IDiscountSupported<T> entity) where T : DiscountMapping
         {
-            var discountMapping = new DbNopCommerce().GetTable<T>();
-
+            //TODO: 239 use entity
             return (from d in _discountRepository.Table
-                    join ad in discountMapping on d.Id equals ad.DiscountId
+                    join ad in _discountMappingRepository.Table on d.Id equals ad.DiscountId
                     select d).ToList();
         }
 
