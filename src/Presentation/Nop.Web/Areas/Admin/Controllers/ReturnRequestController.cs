@@ -2,6 +2,7 @@
 using System.Linq;
 using Microsoft.AspNetCore.Mvc;
 using Nop.Core.Domain.Orders;
+using Nop.Services.Catalog;
 using Nop.Services.Customers;
 using Nop.Services.Localization;
 using Nop.Services.Logging;
@@ -30,6 +31,7 @@ namespace Nop.Web.Areas.Admin.Controllers
         private readonly IReturnRequestModelFactory _returnRequestModelFactory;
         private readonly IReturnRequestService _returnRequestService;
         private readonly IWorkflowMessageService _workflowMessageService;
+        private readonly IProductService _productService;
 
         #endregion Fields
 
@@ -44,7 +46,8 @@ namespace Nop.Web.Areas.Admin.Controllers
             IPermissionService permissionService,
             IReturnRequestModelFactory returnRequestModelFactory,
             IReturnRequestService returnRequestService,
-            IWorkflowMessageService workflowMessageService)
+            IWorkflowMessageService workflowMessageService,
+            IProductService productService)
         {
             _customerActivityService = customerActivityService;
             _customerService = customerService;
@@ -56,6 +59,7 @@ namespace Nop.Web.Areas.Admin.Controllers
             _returnRequestModelFactory = returnRequestModelFactory;
             _returnRequestService = returnRequestService;
             _workflowMessageService = workflowMessageService;
+            _productService = productService;
         }
 
         #endregion
@@ -188,6 +192,50 @@ namespace Nop.Web.Areas.Admin.Controllers
             var queuedEmailIds = _workflowMessageService.SendReturnRequestStatusChangedCustomerNotification(returnRequest, orderItem, orderItem.Order.CustomerLanguageId);
             if (queuedEmailIds.Any())
                 _notificationService.SuccessNotification(_localizationService.GetResource("Admin.ReturnRequests.Notified"));
+
+            return RedirectToAction("Edit", new { id = returnRequest.Id });
+        }
+
+        [HttpPost, ActionName("Edit")]
+        [FormValueRequired("return-to-stock")]
+        public virtual IActionResult ReturnToStock(ReturnRequestModel model)
+        {
+            if (!_permissionService.Authorize(StandardPermissionProvider.ManageReturnRequests))
+                return AccessDeniedView();
+
+            //try to get a return request with the specified id
+            var returnRequest = _returnRequestService.GetReturnRequestById(model.Id);
+            if (returnRequest == null)
+                return RedirectToAction("List");
+
+            if (returnRequest.ItemsReturned)
+            {
+                _notificationService.ErrorNotification(_localizationService.GetResource("Admin.ReturnRequests.ReturnToStock.ItemsAlreadyReturned"));
+                return RedirectToAction("Edit", new { id = returnRequest.Id });
+            }
+
+            var orderItem = _orderService.GetOrderItemById(returnRequest.OrderItemId);
+            if (orderItem == null)
+            {
+                _notificationService.ErrorNotification(_localizationService.GetResource("Admin.ReturnRequests.OrderItemDeleted"));
+                return RedirectToAction("Edit", new { id = returnRequest.Id });
+            }
+
+            if (returnRequest.Quantity <= 0 || returnRequest.Quantity > orderItem.Quantity)
+            {
+                _notificationService.ErrorNotification(
+                    string.Format(_localizationService.GetResource("Admin.ReturnRequests.ReturnToStock.InvalidQuantity"), orderItem.Quantity));
+                return RedirectToAction("Edit", new { id = returnRequest.Id });
+            }
+
+            returnRequest.ItemsReturned = true;
+            returnRequest.UpdatedOnUtc = DateTime.UtcNow;
+            _customerService.UpdateCustomer(returnRequest.Customer);
+
+            _productService.AdjustInventory(orderItem.Product, returnRequest.Quantity, orderItem.AttributesXml,
+                string.Format(_localizationService.GetResource("Admin.StockQuantityHistory.Messages.ReturnToStock"), returnRequest.Id));
+
+            _notificationService.SuccessNotification(_localizationService.GetResource("Admin.ReturnRequests.ReturnToStock.Succeeded"));
 
             return RedirectToAction("Edit", new { id = returnRequest.Id });
         }

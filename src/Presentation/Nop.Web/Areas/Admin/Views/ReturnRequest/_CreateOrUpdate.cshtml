@@ -63,8 +63,23 @@
                             <nop-label asp-for="Quantity" />
                         </div>
                         <div class="col-md-9">
-                            <nop-editor asp-for="Quantity" />
-                            <span asp-validation-for="Quantity"></span>
+                            <div class="input-group">
+                                <nop-editor asp-for="Quantity" />
+                                <span asp-validation-for="Quantity"></span>
+                                <div class="input-group-btn">
+                                    <button type="submit" id="return-to-stock" name="return-to-stock" class="btn @(Model.ItemsReturned ? "bg-gray" : "btn-info")" @(Model.ItemsReturned ? "disabled" : "")>
+                                        @if (Model.ItemsReturned)
+                                        {
+                                            @T("Admin.ReturnRequests.ReturnToStock.SubmitButton.ItemsAlreadyReturned")
+                                        }
+                                        else
+                                        {
+                                            @T("Admin.ReturnRequests.ReturnToStock.SubmitButton")
+                                        }
+                                    </button>
+                                </div>
+                                <nop-action-confirmation asp-button-id="return-to-stock" />
+                            </div>
                         </div>
                     </div>
                     <div class="form-group">
