@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Nop.Core.Domain.Shipping;
 using Nop.Data;
+using Nop.Services.Caching;
 using Nop.Services.Caching.Extensions;
 using Nop.Services.Events;
 
@@ -15,6 +16,7 @@ namespace Nop.Services.Shipping.Date
     {
         #region Fields
 
+        private readonly ICacheKeyService _cacheKeyService;
         private readonly IEventPublisher _eventPublisher;
         private readonly IRepository<DeliveryDate> _deliveryDateRepository;
         private readonly IRepository<ProductAvailabilityRange> _productAvailabilityRangeRepository;
@@ -23,10 +25,12 @@ namespace Nop.Services.Shipping.Date
 
         #region Ctor
 
-        public DateRangeService(IEventPublisher eventPublisher,
+        public DateRangeService(ICacheKeyService cacheKeyService,
+            IEventPublisher eventPublisher,
             IRepository<DeliveryDate> deliveryDateRepository,
             IRepository<ProductAvailabilityRange> productAvailabilityRangeRepository)
         {
+            _cacheKeyService = cacheKeyService;
             _eventPublisher = eventPublisher;
             _deliveryDateRepository = deliveryDateRepository;
             _productAvailabilityRangeRepository = productAvailabilityRangeRepository;
@@ -60,7 +64,8 @@ namespace Nop.Services.Shipping.Date
             var query = from dd in _deliveryDateRepository.Table
                         orderby dd.DisplayOrder, dd.Id
                         select dd;
-            var deliveryDates = query.ToList();
+            var deliveryDates = query.ToCachedList(_cacheKeyService.PrepareKeyForDefaultCache(NopShippingDefaults.DeliveryDatesAllCacheKey));
+
             return deliveryDates;
         }
 
@@ -132,7 +137,8 @@ namespace Nop.Services.Shipping.Date
             var query = from par in _productAvailabilityRangeRepository.Table
                         orderby par.DisplayOrder, par.Id
                         select par;
-            return query.ToList();
+
+            return query.ToCachedList(_cacheKeyService.PrepareKeyForDefaultCache(NopShippingDefaults.ProductAvailabilityAllCacheKey));
         }
 
         /// <summary>

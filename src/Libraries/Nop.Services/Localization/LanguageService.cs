@@ -5,7 +5,7 @@ using System.Linq;
 using Nop.Core.Caching;
 using Nop.Core.Domain.Localization;
 using Nop.Data;
-using Nop.Services.Caching.CachingDefaults;
+using Nop.Services.Caching;
 using Nop.Services.Caching.Extensions;
 using Nop.Services.Configuration;
 using Nop.Services.Events;
@@ -20,10 +20,11 @@ namespace Nop.Services.Localization
     {
         #region Fields
 
+        private readonly ICacheKeyService _cacheKeyService;
         private readonly IEventPublisher _eventPublisher;
         private readonly IRepository<Language> _languageRepository;
         private readonly ISettingService _settingService;
-        private readonly IStaticCacheManager _cacheManager;
+        private readonly IStaticCacheManager _staticCacheManager;
         private readonly IStoreMappingService _storeMappingService;
         private readonly LocalizationSettings _localizationSettings;
 
@@ -31,17 +32,19 @@ namespace Nop.Services.Localization
 
         #region Ctor
 
-        public LanguageService(IEventPublisher eventPublisher,
+        public LanguageService(ICacheKeyService cacheKeyService,
+            IEventPublisher eventPublisher,
             IRepository<Language> languageRepository,
             ISettingService settingService,
-            IStaticCacheManager cacheManager,
+            IStaticCacheManager staticCacheManager,
             IStoreMappingService storeMappingService,
             LocalizationSettings localizationSettings)
         {
+            _cacheKeyService = cacheKeyService;
             _eventPublisher = eventPublisher;
             _languageRepository = languageRepository;
             _settingService = settingService;
-            _cacheManager = cacheManager;
+            _staticCacheManager = staticCacheManager;
             _storeMappingService = storeMappingService;
             _localizationSettings = localizationSettings;
         }
@@ -84,19 +87,17 @@ namespace Nop.Services.Localization
         /// </summary>
         /// <param name="storeId">Load records allowed only in a specified store; pass 0 to load all records</param>
         /// <param name="showHidden">A value indicating whether to show hidden records</param>
-        /// <param name="loadCacheableCopy">A value indicating whether to load a copy that could be cached (workaround until Entity Framework supports 2-level caching)</param>
         /// <returns>Languages</returns>
-        public virtual IList<Language> GetAllLanguages(bool showHidden = false, int storeId = 0,
-            bool loadCacheableCopy = true)
+        public virtual IList<Language> GetAllLanguages(bool showHidden = false, int storeId = 0)
         {
             var query = _languageRepository.Table;
             if (!showHidden) query = query.Where(l => l.Published);
             query = query.OrderBy(l => l.DisplayOrder).ThenBy(l => l.Id);
 
             //cacheable copy
-            var key = string.Format(NopLocalizationCachingDefaults.LanguagesAllCacheKey, storeId, showHidden);
-
-            IList<Language> getLanguages()
+            var key = _cacheKeyService.PrepareKeyForDefaultCache(NopLocalizationDefaults.LanguagesAllCacheKey, storeId, showHidden);
+            
+            var languages = _staticCacheManager.Get(key, () =>
             {
                 var allLanguages = query.ToList();
 
@@ -109,9 +110,7 @@ namespace Nop.Services.Localization
                 }
 
                 return allLanguages;
-            }
-
-            var languages = loadCacheableCopy ? _cacheManager.Get(key, getLanguages) : query.ToList();
+            });
 
             return languages;
         }
@@ -120,17 +119,13 @@ namespace Nop.Services.Localization
         /// Gets a language
         /// </summary>
         /// <param name="languageId">Language identifier</param>
-        /// <param name="loadCacheableCopy">A value indicating whether to load a copy that could be cached (workaround until Entity Framework supports 2-level caching)</param>
         /// <returns>Language</returns>
-        public virtual Language GetLanguageById(int languageId, bool loadCacheableCopy = true)
+        public virtual Language GetLanguageById(int languageId)
         {
             if (languageId == 0)
                 return null;
 
-            //cacheable copy key
-            var key = string.Format(NopLocalizationCachingDefaults.LanguagesByIdCacheKey, languageId);
-
-            return loadCacheableCopy ? _languageRepository.ToCachedGetById(languageId, key) : _languageRepository.ToCachedGetById(languageId);
+            return _languageRepository.ToCachedGetById(languageId);
         }
 
         /// <summary>

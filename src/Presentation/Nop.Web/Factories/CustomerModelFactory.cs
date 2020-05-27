@@ -55,7 +55,6 @@ namespace Nop.Web.Factories
         private readonly ICustomerService _customerService;
         private readonly IDateTimeHelper _dateTimeHelper;
         private readonly IExternalAuthenticationService _externalAuthenticationService;
-        private readonly IDownloadService _downloadService;
         private readonly IGdprService _gdprService;
         private readonly IGenericAttributeService _genericAttributeService;
         private readonly ILocalizationService _localizationService;
@@ -97,7 +96,6 @@ namespace Nop.Web.Factories
             ICustomerService customerService,
             IDateTimeHelper dateTimeHelper,
             IExternalAuthenticationService externalAuthenticationService,
-            IDownloadService downloadService,
             IGdprService gdprService,
             IGenericAttributeService genericAttributeService,
             ILocalizationService localizationService,
@@ -135,7 +133,6 @@ namespace Nop.Web.Factories
             _customerAttributeService = customerAttributeService;
             _customerService = customerService;
             _dateTimeHelper = dateTimeHelper;
-            _downloadService = downloadService;
             _gdprService = gdprService;
             _genericAttributeService = genericAttributeService;
             _localizationService = localizationService;
@@ -373,7 +370,7 @@ namespace Nop.Web.Factories
 
                         model.AvailableStates.Add(new SelectListItem
                         {
-                            Text = _localizationService.GetResource(anyCountrySelected ? "Address.OtherNonUS" : "Address.SelectState"),
+                            Text = _localizationService.GetResource(anyCountrySelected ? "Address.Other" : "Address.SelectState"),
                             Value = "0"
                         });
                     }
@@ -384,6 +381,10 @@ namespace Nop.Web.Factories
             model.DisplayVatNumber = _taxSettings.EuVatEnabled;
             model.VatNumberStatusNote = _localizationService.GetLocalizedEnum((VatNumberStatus)_genericAttributeService
                 .GetAttribute<int>(customer, NopCustomerDefaults.VatNumberStatusIdAttribute));
+            model.FirstNameEnabled = _customerSettings.FirstNameEnabled;
+            model.LastNameEnabled = _customerSettings.LastNameEnabled;
+            model.FirstNameRequired = _customerSettings.FirstNameRequired;
+            model.LastNameRequired = _customerSettings.LastNameRequired;
             model.GenderEnabled = _customerSettings.GenderEnabled;
             model.DateOfBirthEnabled = _customerSettings.DateOfBirthEnabled;
             model.DateOfBirthRequired = _customerSettings.DateOfBirthRequired;
@@ -420,7 +421,8 @@ namespace Nop.Web.Factories
                 .Count;
             foreach (var record in _externalAuthenticationService.GetCustomerExternalAuthenticationRecords(customer))
             {
-                var authMethod = _authenticationPluginManager.LoadPluginBySystemName(record.ProviderSystemName);
+                var authMethod = _authenticationPluginManager
+                    .LoadPluginBySystemName(record.ProviderSystemName, _workContext.CurrentCustomer, _storeContext.CurrentStore.Id);
                 if (!_authenticationPluginManager.IsPluginActive(authMethod))
                     continue;
 
@@ -473,6 +475,10 @@ namespace Nop.Web.Factories
 
             model.DisplayVatNumber = _taxSettings.EuVatEnabled;
             //form fields
+            model.FirstNameEnabled = _customerSettings.FirstNameEnabled;
+            model.LastNameEnabled = _customerSettings.LastNameEnabled;
+            model.FirstNameRequired = _customerSettings.FirstNameRequired;
+            model.LastNameRequired = _customerSettings.LastNameRequired;
             model.GenderEnabled = _customerSettings.GenderEnabled;
             model.DateOfBirthEnabled = _customerSettings.DateOfBirthEnabled;
             model.DateOfBirthRequired = _customerSettings.DateOfBirthRequired;
@@ -544,7 +550,7 @@ namespace Nop.Web.Factories
 
                         model.AvailableStates.Add(new SelectListItem
                         {
-                            Text = _localizationService.GetResource(anyCountrySelected ? "Address.OtherNonUS" : "Address.SelectState"),
+                            Text = _localizationService.GetResource(anyCountrySelected ? "Address.Other" : "Address.SelectState"),
                             Value = "0"
                         });
                     }
@@ -850,10 +856,10 @@ namespace Nop.Web.Factories
                 };
                 model.Items.Add(itemModel);
 
-                if (_downloadService.IsDownloadAllowed(item))
+                if (_orderService.IsDownloadAllowed(item))
                     itemModel.DownloadId = product.DownloadId;
 
-                if (_downloadService.IsLicenseDownloadAllowed(item))
+                if (_orderService.IsLicenseDownloadAllowed(item))
                     itemModel.LicenseId = item.LicenseDownloadId ?? 0;
             }
 

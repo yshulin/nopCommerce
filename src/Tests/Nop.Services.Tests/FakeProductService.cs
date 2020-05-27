@@ -1,6 +1,6 @@
 ﻿using Moq;
 using Nop.Core;
-using Nop.Data;
+using Nop.Core.Caching;
 using Nop.Core.Domain.Catalog;
 using Nop.Core.Domain.Common;
 using Nop.Core.Domain.Discounts;
@@ -8,7 +8,8 @@ using Nop.Core.Domain.Localization;
 using Nop.Core.Domain.Security;
 using Nop.Core.Domain.Shipping;
 using Nop.Core.Domain.Stores;
-using Nop.Services.Caching.CachingDefaults;
+using Nop.Data;
+using Nop.Services.Caching;
 using Nop.Services.Catalog;
 using Nop.Services.Customers;
 using Nop.Services.Events;
@@ -25,9 +26,9 @@ namespace Nop.Services.Tests
         public FakeProductService(CatalogSettings catalogSettings = null,
             CommonSettings commonSettings = null,
             IAclService aclService = null,
-            ICacheKeyFactory cacheKeyFactory = null,
+            ICacheKeyService cacheKeyService = null,
             ICustomerService customerService = null,
-            IDataProvider dataProvider = null,
+            INopDataProvider dataProvider = null,
             IDateRangeService dateRangeService = null,
             IEventPublisher eventPublisher = null,
             ILanguageService languageService = null,
@@ -51,6 +52,7 @@ namespace Nop.Services.Tests
             IRepository<StoreMapping> storeMappingRepository = null,
             IRepository<TierPrice> tierPriceRepository = null,
             IRepository<Warehouse> warehouseRepository = null,
+            IStaticCacheManager staticCacheManager = null,
             IStoreService storeService = null,
             IStoreMappingService storeMappingService = null,
             IWorkContext workContext = null,
@@ -58,9 +60,9 @@ namespace Nop.Services.Tests
                 catalogSettings ?? new CatalogSettings(),
                 commonSettings ?? new CommonSettings(),
                 aclService ?? new Mock<IAclService>().Object,
-                cacheKeyFactory ?? new Mock<ICacheKeyFactory>().Object,
+                cacheKeyService ?? new FakeCacheKeyService(),
                 customerService ?? new Mock<ICustomerService>().Object,
-                dataProvider ?? new Mock<IDataProvider>().Object,
+                dataProvider ?? new Mock<INopDataProvider>().Object,
                 dateRangeService ?? new Mock<IDateRangeService>().Object,
                 eventPublisher ?? new Mock<IEventPublisher>().Object,
                 languageService ?? new Mock<ILanguageService>().Object,
@@ -84,6 +86,7 @@ namespace Nop.Services.Tests
                 storeMappingRepository.FakeRepoNullPropagation(),
                 tierPriceRepository.FakeRepoNullPropagation(),
                 warehouseRepository.FakeRepoNullPropagation(),
+                staticCacheManager ?? new TestCacheManager(),
                 storeService ?? new Mock<IStoreService>().Object,
                 storeMappingService ?? new Mock<IStoreMappingService>().Object,
                 workContext ?? new Mock<IWorkContext>().Object,

@@ -69,9 +69,11 @@ namespace Nop.Web.Areas.Admin.Models.Customers
         [NopResourceDisplayName("Admin.Customers.Customers.Fields.Gender")]
         public string Gender { get; set; }
 
+        public bool FirstNameEnabled { get; set; }
         [NopResourceDisplayName("Admin.Customers.Customers.Fields.FirstName")]
         public string FirstName { get; set; }
 
+        public bool LastNameEnabled { get; set; }
         [NopResourceDisplayName("Admin.Customers.Customers.Fields.LastName")]
         public string LastName { get; set; }
 
@@ -220,6 +222,9 @@ namespace Nop.Web.Areas.Admin.Models.Customers
 
         //send PM model
         public SendPmModel SendPm { get; set; }
+
+        //send a private message
+        public bool AllowSendingOfPrivateMessage { get; set; }
 
         //send the welcome message
         public bool AllowSendingOfWelcomeMessage { get; set; }

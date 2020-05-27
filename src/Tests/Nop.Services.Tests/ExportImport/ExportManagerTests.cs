@@ -152,7 +152,7 @@ namespace Nop.Services.Tests.ExportImport
             _dateRangeService.Setup(d => d.GetAllDeliveryDates()).Returns(new List<DeliveryDate> { new DeliveryDate { Id = 1 } });
             _dateRangeService.Setup(d => d.GetAllProductAvailabilityRanges()).Returns(new List<ProductAvailabilityRange> { new ProductAvailabilityRange { Id = 1 } });
             _taxCategoryService.Setup(t => t.GetAllTaxCategories()).Returns(new List<TaxCategory> { new TaxCategory() });
-            _vendorService.Setup(v => v.GetAllVendors(string.Empty, 0, int.MaxValue, true)).Returns(new PagedList<Vendor>(new List<Vendor> { new Vendor { Id = 1 } }, 0, 10));
+            _vendorService.Setup(v => v.GetAllVendors(string.Empty, string.Empty, 0, int.MaxValue, true)).Returns(new PagedList<Vendor>(new List<Vendor> { new Vendor { Id = 1 } }, 0, 10));
             _measureService.Setup(m => m.GetAllMeasureWeights()).Returns(new List<MeasureWeight> { new MeasureWeight() });
             _categoryService.Setup(c => c.GetProductCategoriesByProductId(1, true)).Returns(new List<ProductCategory>());
             _manufacturerService.Setup(m => m.GetProductManufacturersByProductId(1, true)).Returns(new List<ProductManufacturer>());
@@ -230,7 +230,7 @@ namespace Nop.Services.Tests.ExportImport
                     continue;
 
                 var objectPropertyValue = objectProperty.GetValue(actual);
-                objectPropertyValue = objectPropertyValue ?? string.Empty;
+                objectPropertyValue ??= string.Empty;
 
                 if (objectProperty.PropertyType == typeof(Guid))
                 {
@@ -483,7 +483,7 @@ namespace Nop.Services.Tests.ExportImport
             //fields tested individually
             ignore.AddRange(new[]
             {
-               "Customer", "BillingAddressId", "ShippingAddressId"
+               "Customer", "BillingAddressId", "ShippingAddressId", "EntityCacheKey"
             });
 
             AreAllObjectPropertiesPresent(order, manager, ignore.ToArray());
@@ -550,7 +550,7 @@ namespace Nop.Services.Tests.ExportImport
 
             var manufacturer = manufacturers.First();
 
-            var ignore = new List<string> { "Picture", "PictureId", "SubjectToAcl", "LimitedToStores", "Deleted", "CreatedOnUtc", "UpdatedOnUtc", "AppliedDiscounts", "DiscountManufacturerMappings" };
+            var ignore = new List<string> { "Picture", "EntityCacheKey", "PictureId", "SubjectToAcl", "LimitedToStores", "Deleted", "CreatedOnUtc", "UpdatedOnUtc", "AppliedDiscounts", "DiscountManufacturerMappings" };
 
             AreAllObjectPropertiesPresent(manufacturer, manager, ignore.ToArray());
             PropertiesShouldEqual(manufacturer, manager, new Dictionary<string, string>());
@@ -588,7 +588,7 @@ namespace Nop.Services.Tests.ExportImport
                 "EmailToRevalidate", "HasShoppingCartItems", "RequireReLogin", "FailedLoginAttempts",
                 "CannotLoginUntilDateUtc", "Deleted", "IsSystemAccount", "SystemName", "LastIpAddress",
                 "LastLoginDateUtc", "LastActivityDateUtc", "RegisteredInStoreId", "BillingAddressId", "ShippingAddressId",
-                "CustomerCustomerRoleMappings", "CustomerAddressMappings" };
+                "CustomerCustomerRoleMappings", "CustomerAddressMappings", "EntityCacheKey" };
 
             AreAllObjectPropertiesPresent(customer, manager, ignore.ToArray());
             PropertiesShouldEqual(customer, manager, new Dictionary<string, string>());
@@ -628,7 +628,7 @@ namespace Nop.Services.Tests.ExportImport
             manager.ReadFromXlsx(worksheet, 2);
             var category = categories.First();
 
-            var ignore = new List<string> { "CreatedOnUtc", "Picture", "PictureId", "AppliedDiscounts", "UpdatedOnUtc", "SubjectToAcl", "LimitedToStores", "Deleted", "DiscountCategoryMappings" };
+            var ignore = new List<string> { "CreatedOnUtc", "EntityCacheKey", "Picture", "PictureId", "AppliedDiscounts", "UpdatedOnUtc", "SubjectToAcl", "LimitedToStores", "Deleted", "DiscountCategoryMappings" };
 
             AreAllObjectPropertiesPresent(category, manager, ignore.ToArray());
             PropertiesShouldEqual(category, manager, new Dictionary<string, string>());
@@ -763,7 +763,7 @@ namespace Nop.Services.Tests.ExportImport
                 "ApprovedTotalReviews", "NotApprovedTotalReviews", "SubjectToAcl", "LimitedToStores", "Deleted",
                 "DownloadExpirationDays", "HasTierPrices", "HasDiscountsApplied", "AvailableStartDateTimeUtc",
                 "AvailableEndDateTimeUtc", "DisplayOrder", "CreatedOnUtc", "UpdatedOnUtc", "ProductProductTagMappings",
-                "DiscountProductMappings" };
+                "DiscountProductMappings", "EntityCacheKey" };
 
             ignore.AddRange(replacePairse.Values);
 

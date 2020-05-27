@@ -8,6 +8,7 @@ using Nop.Core;
 using Nop.Core.Domain.Catalog;
 using Nop.Core.Domain.Common;
 using Nop.Core.Domain.Customers;
+using Nop.Core.Domain.Forums;
 using Nop.Core.Domain.Gdpr;
 using Nop.Core.Domain.Media;
 using Nop.Core.Domain.Orders;
@@ -47,6 +48,7 @@ namespace Nop.Web.Areas.Admin.Factories
         private readonly CustomerSettings _customerSettings;
         private readonly DateTimeSettings _dateTimeSettings;
         private readonly GdprSettings _gdprSettings;
+        private readonly ForumSettings _forumSettings;
         private readonly IAclSupportedModelFactory _aclSupportedModelFactory;
         private readonly IAddressAttributeFormatter _addressAttributeFormatter;
         private readonly IAddressAttributeModelFactory _addressAttributeModelFactory;
@@ -89,6 +91,7 @@ namespace Nop.Web.Areas.Admin.Factories
             CustomerSettings customerSettings,
             DateTimeSettings dateTimeSettings,
             GdprSettings gdprSettings,
+            ForumSettings forumSettings,
             IAclSupportedModelFactory aclSupportedModelFactory,
             IAddressAttributeFormatter addressAttributeFormatter,
             IAddressAttributeModelFactory addressAttributeModelFactory,
@@ -127,6 +130,7 @@ namespace Nop.Web.Areas.Admin.Factories
             _customerSettings = customerSettings;
             _dateTimeSettings = dateTimeSettings;
             _gdprSettings = gdprSettings;
+            _forumSettings = forumSettings;
             _aclSupportedModelFactory = aclSupportedModelFactory;
             _addressAttributeFormatter = addressAttributeFormatter;
             _addressAttributeModelFactory = addressAttributeModelFactory;
@@ -582,6 +586,8 @@ namespace Nop.Web.Areas.Admin.Factories
 
             searchModel.UsernamesEnabled = _customerSettings.UsernamesEnabled;
             searchModel.AvatarEnabled = _customerSettings.AllowCustomersToUploadAvatars;
+            searchModel.FirstNameEnabled = _customerSettings.FirstNameEnabled;
+            searchModel.LastNameEnabled = _customerSettings.LastNameEnabled;
             searchModel.DateOfBirthEnabled = _customerSettings.DateOfBirthEnabled;
             searchModel.CompanyEnabled = _customerSettings.CompanyEnabled;
             searchModel.PhoneEnabled = _customerSettings.PhoneEnabled;
@@ -675,10 +681,12 @@ namespace Nop.Web.Areas.Admin.Factories
             if (customer != null)
             {
                 //fill in model values from the entity
-                model = model ?? new CustomerModel();
+                model ??= new CustomerModel();
 
                 model.Id = customer.Id;
                 model.DisplayVatNumber = _taxSettings.EuVatEnabled;
+                model.AllowSendingOfPrivateMessage = _customerService.IsRegistered(customer) &&
+                    _forumSettings.AllowPrivateMessages;
                 model.AllowSendingOfWelcomeMessage = _customerService.IsRegistered(customer) &&
                     _customerSettings.UserRegistrationType == UserRegistrationType.AdminApproval;
                 model.AllowReSendingOfActivationMessage = _customerService.IsRegistered(customer) && !customer.Active &&
@@ -766,6 +774,8 @@ namespace Nop.Web.Areas.Admin.Factories
 
             model.UsernamesEnabled = _customerSettings.UsernamesEnabled;
             model.AllowCustomersToSetTimeZone = _dateTimeSettings.AllowCustomersToSetTimeZone;
+            model.FirstNameEnabled = _customerSettings.FirstNameEnabled;
+            model.LastNameEnabled = _customerSettings.LastNameEnabled;
             model.GenderEnabled = _customerSettings.GenderEnabled;
             model.DateOfBirthEnabled = _customerSettings.DateOfBirthEnabled;
             model.CompanyEnabled = _customerSettings.CompanyEnabled;
@@ -919,7 +929,7 @@ namespace Nop.Web.Areas.Admin.Factories
             if (address != null)
             {
                 //fill in model values from the entity
-                model = model ?? new CustomerAddressModel();
+                model ??= new CustomerAddressModel();
 
                 //whether to fill in some of properties
                 if (!excludeProperties)

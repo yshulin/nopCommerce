@@ -5,7 +5,6 @@ using System.Linq;
 using System.Xml;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Primitives;
-using Nop.Core.Caching;
 using Nop.Core.Domain.Catalog;
 using Nop.Core.Domain.Common;
 using Nop.Services.Localization;
