@@ -1,22 +1,20 @@
 ﻿using Nop.Core.Domain.Topics;
 using Nop.Services.Caching;
 
-namespace Nop.Services.Topics.Caching
+namespace Nop.Services.Topics.Caching;
+
+/// <summary>
+/// Represents a topic cache event consumer
+/// </summary>
+public partial class TopicCacheEventConsumer : CacheEventConsumer<Topic>
 {
     /// <summary>
-    /// Represents a topic cache event consumer
+    /// Clear cache data
     /// </summary>
-    public partial class TopicCacheEventConsumer : CacheEventConsumer<Topic>
+    /// <param name="entity">Entity</param>
+    /// <returns>A task that represents the asynchronous operation</returns>
+    protected override async Task ClearCacheAsync(Topic entity)
     {
-        /// <summary>
-        /// Clear cache data
-        /// </summary>
-        /// <param name="entity">Entity</param>
-        protected override void ClearCache(Topic entity)
-        {
-            RemoveByPrefix(NopTopicDefaults.TopicsAllPrefixCacheKey);
-            var prefix = _cacheKeyService.PrepareKeyPrefix(NopTopicDefaults.TopicBySystemNamePrefixCacheKey, entity.SystemName);
-            RemoveByPrefix(prefix);
-        }
+        await RemoveByPrefixAsync(NopTopicDefaults.TopicBySystemNamePrefix, entity.SystemName);
     }
 }

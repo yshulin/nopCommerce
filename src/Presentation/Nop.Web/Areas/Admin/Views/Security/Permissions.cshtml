@@ -1,100 +1,127 @@
-@model PermissionMappingModel
+@model PermissionConfigurationModel
 
 @{
     //page title
     ViewBag.PageTitle = T("Admin.Configuration.ACL").Text;
     //active menu item (system name)
-    Html.SetActiveMenuItemSystemName("Access control list");
+    NopHtml.SetActiveMenuItemSystemName("Access control list");
 }
 
-<form asp-controller="Security" asp-action="Permissions" method="post">
+<style type="text/css">
+    table.dataTable.table-hover>tbody>tr:hover>*{box-shadow:inset 0 0 0 9999px rgba(255, 255, 255, 1)}
+
+    table.dataTable.table-striped>tbody>tr.odd>*{box-shadow:inset 0 0 0 9999px rgba(0, 0, 0, 0.05)}
+</style>
+
+<script type="text/javascript">     
+    $(function () {
+        $('#permissions-grid').on( 'init.dt', function () {
+            $('tr').css('bg-color', 'white');
+        } );
+    });
+</script>
+
+<form asp-controller="Security" asp-action="Permissions" method="post" id="permissions-form">
     <div class="content-header clearfix">
-        <h1 class="pull-left">
-            @T("Admin.Configuration.ACL")
-        </h1>
-        <div class="pull-right">
-            <button type="submit" name="save" class="btn bg-blue">
-                <i class="fa fa-floppy-o"></i>
-                @T("Admin.Common.Save")
-            </button>
-            @await Component.InvokeAsync("AdminWidget", new { widgetZone = AdminWidgetZones.PermissionListButtons })
+        <div class="float-right">
+            @await Component.InvokeAsync(typeof(AdminWidgetViewComponent), new { widgetZone = AdminWidgetZones.PermissionListButtons, additionalData = Model })
         </div>
     </div>
 
-    <div class="content">
-        <div class="form-horizontal">
-            <div class="panel-group">
-                <div class="panel panel-default">
-                    <div class="panel-body">
-                        <p>
-                            @T("Admin.Configuration.ACL.Description")
-                        </p>
-                        @if (Model.AvailablePermissions.Count == 0)
-                        {
-                            <text>No permissions defined</text>
-                        }
-                        else if (Model.AvailableCustomerRoles.Count == 0)
-                        {
-                            <text>No customer roles available</text>
-                        }
-                        else
-                        {
-                            <script>
-                                $(document).ready(function () {
-                                    @foreach (var cr in Model.AvailableCustomerRoles)
+    <section class="content">
+        <div class="container-fluid">
+            <div class="form-horizontal">
+                <div class="cards-group">
+                    <div class="card card-default">
+                        <div class="card-body">
+                            <p>
+                                @T("Admin.Configuration.ACL.Description")
+                                <nop-doc-reference asp-string-resource="@T("Admin.Documentation.Reference.Acl", Docs.Acl + Utm.OnAdmin)" asp-add-wrapper="false" />
+                            </p>
+                            @if (!Model.IsPermissionsAvailable)
+                            {
+                                <text>@T("Admin.Configuration.ACL.NoPermissionsDefined")</text>
+                            }
+                            else if (!Model.AreCustomerRolesAvailable)
+                            {
+                                <text>@T("Admin.Configuration.ACL.NoCustomerRolesAvailable")</text>
+                            }
+                            else
+                            {
+                                <div class="scroll-wrapper">
+                                    @await Html.PartialAsync("Table", new DataTablesModel
                                     {
-                                        <text>
-                                    $('#selectall-@(cr.Id)').click(function () {
-                                        $('.allow_@(cr.Id)').attr('checked', $(this).is(':checked')).change();
-                                    });
-
-                                    </text>
-                                    }
-                                });
-                            </script>
-                            <div class="scroll-wrapper">
-                                <table class="table table-hover table-bordered">
-                                    <thead>
-                                        <tr>
-                                            <th scope="col">
-                                                <strong>@T("Admin.Configuration.ACL.Permission")</strong>
-                                            </th>
-                                            @foreach (var cr in Model.AvailableCustomerRoles)
-                                            {
-                                                <th scope="col">
-                                                    <div class="checkbox">
-                                                        <label>
-                                                            <input type="checkbox" id="selectall-@(cr.Id)" />
-                                                            <strong>@cr.Name</strong>
-                                                        </label>
-                                                    </div>
-                                                </th>
-                                            }
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        @foreach (var pr in Model.AvailablePermissions)
+                                        Name = "permissions-grid",
+                                        RefreshButton = false,
+                                        UrlRead = new DataUrl("PermissionCategories", "Security", null),
+                                        PrimaryKeyColumn = nameof(PermissionCategoryModel.Name),
+                                        Length = Model.PermissionCategorySearchModel.PageSize,
+                                        ColumnCollection = new List<ColumnProperty>
                                         {
-                                            <tr>
-                                                <td>
-                                                    <span>@pr.Name</span>
-                                                </td>
-                                                @foreach (var cr in Model.AvailableCustomerRoles)
+                                            new(null)
+                                            {
+                                                Render = new RenderChildCaret(),
+                                                Width = "5",
+                                                Searchable = false,
+                                                ClassName = NopColumnClassDefaults.ChildControl
+                                            },
+                                            new(nameof(PermissionCategoryModel.Name))
+                                            {
+                                                Title = T("Admin.Configuration.ACL.Permission.CategoryName").Text,
+                                                Render = new RenderCustom("renderPermissionCategory")
+                                            }
+                                        },
+                                        ChildTable = new DataTablesModel
+                                        {
+                                            Name = "permission-items-grid",
+                                            UrlRead = new DataUrl("PermissionCategory", "Security", null),
+                                            IsChildTable = true,
+                                            Length = Model.PermissionCategorySearchModel.PageSize,
+                                            LengthMenu = Model.PermissionCategorySearchModel.AvailablePageSizes,
+                                            Filters = new List<FilterParameter>
+                                            {
+                                                new(nameof(PermissionItemSearchModel.PermissionCategoryName), nameof(PermissionCategoryModel.Name), true)
+                                            },
+                                            ColumnCollection = new List<ColumnProperty>
+                                            {
+                                                new(nameof(PermissionItemModel.PermissionName))
                                                 {
-                                                    var allowed = Model.Allowed.ContainsKey(pr.SystemName) && Model.Allowed[pr.SystemName][cr.Id];
-                                                    <td>
-                                                        <input class="allow_@(cr.Id)" type="checkbox" value="@(pr.SystemName)" name="allow_@(cr.Id)" @(allowed ? " checked=checked" : null) />
-                                                    </td>
-                                                }
-                                            </tr>
+                                                    Title = T("Admin.Configuration.ACL.Permission.PermissionName").Text, 
+                                                    Width = "400px"
+                                                },
+                                                new(nameof(PermissionItemModel.PermissionAppliedFor))
+                                                {
+                                                    Title = T("Admin.Customers.CustomerRoles").Text,
+                                                    AutoWidth = true,
+                                                    Render = new RenderCustom("renderPermissionText")
+                                                },
+                                                new(nameof(PermissionItemModel.Id))
+                                                {
+                                                    Title = T("Admin.Common.Edit").Text,
+                                                    Width = "100px",
+                                                    ClassName = NopColumnClassDefaults.Button,
+                                                    Render = new RenderCustom("renderPermissionEdit")
+                                                },
+                                            }
                                         }
-                                    </tbody>
-                                </table>
-                            </div>
-                        }
+                                    })
+                                    <script>
+                                        function renderPermissionEdit(data, type, row, meta) {
+                                            return '<button onclick=\"javascript:OpenWindow(\'@Url.Content("~/Admin/Security/PermissionEditPopup/")' + data + '\', 800, 300, true); return false;\" class="btn btn-default"><i class="fas fa-pencil-alt"></i>@T("Admin.Common.Edit").Text</button>';
+                                        }
+                                        function renderPermissionText(data, type, row, meta) {                                            
+                                            return '<span id="permission-applied-for-' + row.Id + '">' + data + '</span>';
+                                        }
+                                        function renderPermissionCategory(data, type, row, meta) {
+                                            return row.Text;
+                                        }                                        
+                                    </script>
+                                </div>
+                            }
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
-    </div>
+    </section>
 </form>

@@ -1,90 +1,115 @@
-﻿using System.Linq;
-using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Routing;
-using Microsoft.Extensions.DependencyInjection;
-using Nop.Core.Domain.Localization;
-using Nop.Data;
-using Nop.Services.Localization;
+﻿using Nop.Data;
 using Nop.Web.Framework.Mvc.Routing;
 
-namespace Nop.Web.Infrastructure
+namespace Nop.Web.Infrastructure;
+
+/// <summary>
+/// Represents provider that provided generic routes
+/// </summary>
+public partial class GenericUrlRouteProvider : BaseRouteProvider, IRouteProvider
 {
+    #region Methods
+
     /// <summary>
-    /// Represents provider that provided generic routes
+    /// Register routes
     /// </summary>
-    public partial class GenericUrlRouteProvider : IRouteProvider
+    /// <param name="endpointRouteBuilder">Route builder</param>
+    public void RegisterRoutes(IEndpointRouteBuilder endpointRouteBuilder)
     {
-        #region Methods
+        var lang = GetLanguageRoutePattern();
 
-        /// <summary>
-        /// Register routes
-        /// </summary>
-        /// <param name="endpointRouteBuilder">Route builder</param>
-        public void RegisterRoutes(IEndpointRouteBuilder endpointRouteBuilder)
+        //default routes
+        //these routes are not generic, they are just default to map requests that don't match other patterns, 
+        //but we define them here since this route provider is with the lowest priority, to allow to add additional routes before them
+        if (!string.IsNullOrEmpty(lang))
         {
-            var pattern = "{SeName}";
-            if (DataSettingsManager.DatabaseIsInstalled)
-            {
-                var localizationSettings = endpointRouteBuilder.ServiceProvider.GetRequiredService<LocalizationSettings>();
-                if (localizationSettings.SeoFriendlyUrlsForLanguagesEnabled)
-                {
-                    var langservice = endpointRouteBuilder.ServiceProvider.GetRequiredService<ILanguageService>();
-                    var languages = langservice.GetAllLanguages().ToList();
-                    pattern = "{language:lang=" + languages.FirstOrDefault().UniqueSeoCode + "}/{SeName}";
-                }
-            }
-            endpointRouteBuilder.MapDynamicControllerRoute<SlugRouteTransformer>(pattern);
-
-            //and default one
-            endpointRouteBuilder.MapControllerRoute(
-                name: "Default",
-                pattern: "{controller=Home}/{action=Index}/{id?}");
-
-            //generic URLs
-            endpointRouteBuilder.MapControllerRoute(
-                name: "GenericUrl",
-                pattern: "{GenericSeName}",
-                new { controller = "Common", action = "GenericUrl" });
-
-            //define this routes to use in UI views (in case if you want to customize some of them later)
-            endpointRouteBuilder.MapControllerRoute("Product", pattern, 
-                new { controller = "Product", action = "ProductDetails" });
-
-            endpointRouteBuilder.MapControllerRoute("Category", pattern, 
-                new { controller = "Catalog", action = "Category" });
-
-            endpointRouteBuilder.MapControllerRoute("Manufacturer", pattern, 
-                new { controller = "Catalog", action = "Manufacturer" });
-
-            endpointRouteBuilder.MapControllerRoute("Vendor", pattern, 
-                new { controller = "Catalog", action = "Vendor" });
-            
-            endpointRouteBuilder.MapControllerRoute("NewsItem", pattern, 
-                new { controller = "News", action = "NewsItem" });
-
-            endpointRouteBuilder.MapControllerRoute("BlogPost", pattern, 
-                new { controller = "Blog", action = "BlogPost" });
-
-            endpointRouteBuilder.MapControllerRoute("Topic", pattern, 
-                new { controller = "Topic", action = "TopicDetails" });
-
-            //product tags
-            endpointRouteBuilder.MapControllerRoute("ProductsByTag", pattern,
-                new { controller = "Catalog", action = "ProductsByTag" });
+            endpointRouteBuilder.MapControllerRoute(name: "DefaultWithLanguageCode",
+                pattern: $"{lang}/{{controller=Home}}/{{action=Index}}/{{id?}}");
         }
 
-        #endregion
+        endpointRouteBuilder.MapControllerRoute(name: "Default",
+            pattern: "{controller=Home}/{action=Index}/{id?}");
 
-        #region Properties
+        if (!DataSettingsManager.IsDatabaseInstalled())
+            return;
 
-        /// <summary>
-        /// Gets a priority of route provider
-        /// </summary>
-        /// <remarks>
-        /// it should be the last route. we do not set it to -int.MaxValue so it could be overridden (if required)
-        /// </remarks>
-        public int Priority => -1000000;
+        //generic routes (actually routing is processed later in SlugRouteTransformer)
+        var genericCatalogPattern = $"{lang}/{{{NopRoutingDefaults.RouteValue.CatalogSeName}}}/{{{NopRoutingDefaults.RouteValue.SeName}}}";
+        endpointRouteBuilder.MapDynamicControllerRoute<SlugRouteTransformer>(genericCatalogPattern);
 
-        #endregion
+        var genericPattern = $"{lang}/{{{NopRoutingDefaults.RouteValue.SeName}}}";
+        endpointRouteBuilder.MapDynamicControllerRoute<SlugRouteTransformer>(genericPattern);
+
+        //routes for not found slugs
+        if (!string.IsNullOrEmpty(lang))
+        {
+            endpointRouteBuilder.MapControllerRoute(name: NopRoutingDefaults.RouteName.Generic.GenericUrlWithLanguageCode,
+                pattern: genericPattern,
+                defaults: new { controller = "Common", action = "GenericUrl" });
+
+            endpointRouteBuilder.MapControllerRoute(name: NopRoutingDefaults.RouteName.Generic.GenericCatalogUrlWithLanguageCode,
+                pattern: genericCatalogPattern,
+                defaults: new { controller = "Common", action = "GenericUrl" });
+        }
+
+        endpointRouteBuilder.MapControllerRoute(name: NopRoutingDefaults.RouteName.Generic.GenericUrl,
+            pattern: $"{{{NopRoutingDefaults.RouteValue.SeName}}}",
+            defaults: new { controller = "Common", action = "GenericUrl" });
+
+        endpointRouteBuilder.MapControllerRoute(name: NopRoutingDefaults.RouteName.Generic.GenericCatalogUrl,
+            pattern: $"{{{NopRoutingDefaults.RouteValue.CatalogSeName}}}/{{{NopRoutingDefaults.RouteValue.SeName}}}",
+            defaults: new { controller = "Common", action = "GenericUrl" });
+
+        //routes for entities that support catalog path and slug (e.g. '/category-seo-name/product-seo-name')
+        endpointRouteBuilder.MapControllerRoute(name: NopRoutingDefaults.RouteName.Generic.ProductCatalog,
+            pattern: genericCatalogPattern,
+            defaults: new { controller = "Product", action = "ProductDetails" });
+
+        //routes for entities that support single slug (e.g. '/product-seo-name')
+        endpointRouteBuilder.MapControllerRoute(name: NopRoutingDefaults.RouteName.Generic.Product,
+            pattern: genericPattern,
+            defaults: new { controller = "Product", action = "ProductDetails" });
+
+        endpointRouteBuilder.MapControllerRoute(name: NopRoutingDefaults.RouteName.Generic.Category,
+            pattern: genericPattern,
+            defaults: new { controller = "Catalog", action = "Category" });
+
+        endpointRouteBuilder.MapControllerRoute(name: NopRoutingDefaults.RouteName.Generic.Manufacturer,
+            pattern: genericPattern,
+            defaults: new { controller = "Catalog", action = "Manufacturer" });
+
+        endpointRouteBuilder.MapControllerRoute(name: NopRoutingDefaults.RouteName.Generic.Vendor,
+            pattern: genericPattern,
+            defaults: new { controller = "Catalog", action = "Vendor" });
+
+        endpointRouteBuilder.MapControllerRoute(name: NopRoutingDefaults.RouteName.Generic.NewsItem,
+            pattern: genericPattern,
+            defaults: new { controller = "News", action = "NewsItem" });
+
+        endpointRouteBuilder.MapControllerRoute(name: NopRoutingDefaults.RouteName.Generic.BlogPost,
+            pattern: genericPattern,
+            defaults: new { controller = "Blog", action = "BlogPost" });
+
+        endpointRouteBuilder.MapControllerRoute(name: NopRoutingDefaults.RouteName.Generic.Topic,
+            pattern: genericPattern,
+            defaults: new { controller = "Topic", action = "TopicDetails" });
+
+        endpointRouteBuilder.MapControllerRoute(name: NopRoutingDefaults.RouteName.Generic.ProductTag,
+            pattern: genericPattern,
+            defaults: new { controller = "Catalog", action = "ProductsByTag" });
     }
+
+    #endregion
+
+    #region Properties
+
+    /// <summary>
+    /// Gets a priority of route provider
+    /// </summary>
+    /// <remarks>
+    /// it should be the last route. we do not set it to -int.MaxValue so it could be overridden (if required)
+    /// </remarks>
+    public int Priority => -1000000;
+
+    #endregion
 }

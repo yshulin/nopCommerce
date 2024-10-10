@@ -1,102 +1,130 @@
-﻿using System;
-using System.Net;
+﻿using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
+using Microsoft.Extensions.Hosting;
 using Nop.Core;
+using Nop.Core.Http.Extensions;
 using Nop.Data;
 
-namespace Nop.Web.Framework.Mvc.Filters
+namespace Nop.Web.Framework.Mvc.Filters;
+
+/// <summary>
+/// Represents a filter attribute that checks whether current connection is secured and properly redirect if necessary
+/// </summary>
+public sealed class HttpsRequirementAttribute : TypeFilterAttribute
 {
+    #region Ctor
+
     /// <summary>
-    /// Represents a filter attribute that checks whether current connection is secured and properly redirect if necessary
+    /// Create instance of the filter attribute
     /// </summary>
-    public sealed class HttpsRequirementAttribute : TypeFilterAttribute
+    /// <param name="ignore">Whether to ignore the execution of filter actions</param>
+    public HttpsRequirementAttribute(bool ignore = false) : base(typeof(HttpsRequirementFilter))
     {
+        IgnoreFilter = ignore;
+        Arguments = [ignore];
+    }
+
+    #endregion
+
+    #region Properties
+
+    /// <summary>
+    /// Gets a value indicating whether to ignore the execution of filter actions
+    /// </summary>
+    public bool IgnoreFilter { get; }
+
+    #endregion
+
+    #region Nested filter
+
+    /// <summary>
+    /// Represents a filter confirming that checks whether current connection is secured and properly redirect if necessary
+    /// </summary>
+    private class HttpsRequirementFilter : IAsyncAuthorizationFilter
+    {
+        #region Fields
+
+        protected readonly bool _ignoreFilter;
+        protected readonly IStoreContext _storeContext;
+        protected readonly IWebHelper _webHelper;
+        protected readonly IWebHostEnvironment _webHostEnvironment;
+
+        #endregion
+
         #region Ctor
 
-        /// <summary>
-        /// Create instance of the filter attribute
-        /// </summary>
-        public HttpsRequirementAttribute() : base(typeof(HttpsRequirementFilter))
+        public HttpsRequirementFilter(bool ignoreFilter, IStoreContext storeContext, IWebHelper webHelper, IWebHostEnvironment webHostEnvironment)
         {
+            _ignoreFilter = ignoreFilter;
+            _storeContext = storeContext;
+            _webHelper = webHelper;
+            _webHostEnvironment = webHostEnvironment;
         }
 
         #endregion
 
-        #region Nested filter
+        #region Utilities
 
         /// <summary>
-        /// Represents a filter confirming that checks whether current connection is secured and properly redirect if necessary
+        /// Called early in the filter pipeline to confirm request is authorized
         /// </summary>
-        private class HttpsRequirementFilter : IAuthorizationFilter
+        /// <param name="context">Authorization filter context</param>
+        /// <returns>A task that represents the asynchronous operation</returns>
+        private async Task CheckHttpsRequirementAsync(AuthorizationFilterContext context)
         {
-            #region Fields
+            ArgumentNullException.ThrowIfNull(context);
 
-            private readonly IStoreContext _storeContext;
-            private readonly IWebHelper _webHelper;
+            //only in GET requests, otherwise the browser might not propagate the verb and request body correctly
+            if (!context.HttpContext.Request.IsGetRequest())
+                return;
 
-            #endregion
+            if (!DataSettingsManager.IsDatabaseInstalled())
+                return;
 
-            #region Ctor
+            //check whether this filter has been overridden for the action
+            var actionFilter = context.ActionDescriptor.FilterDescriptors
+                .Where(filterDescriptor => filterDescriptor.Scope == FilterScope.Action)
+                .Select(filterDescriptor => filterDescriptor.Filter)
+                .OfType<HttpsRequirementAttribute>()
+                .FirstOrDefault();
 
-            public HttpsRequirementFilter(IStoreContext storeContext, IWebHelper webHelper)
-            {
-                _storeContext = storeContext;
-                _webHelper = webHelper;
-            }
+            if (actionFilter?.IgnoreFilter ?? _ignoreFilter)
+                return;
 
-            #endregion
+            var store = await _storeContext.GetCurrentStoreAsync();
 
-            #region Utilities
+            //whether current connection is secured
+            var currentConnectionSecured = _webHelper.IsCurrentConnectionSecured();
 
-            /// <summary>
-            /// Check whether current connection is secured and properly redirect if necessary
-            /// </summary>
-            /// <param name="filterContext">Authorization filter context</param>
-            /// <param name="useSsl">Whether the page should be secured</param>
-            protected void RedirectRequest(AuthorizationFilterContext filterContext, bool useSsl)
-            {
-                //whether current connection is secured
-                var currentConnectionSecured = _webHelper.IsCurrentConnectionSecured();
+            //link caching can cause unstable behavior in development environments, when we use permanent redirects
+            var isPermanent = !_webHostEnvironment.IsDevelopment();
 
-                //page should be secured, so redirect (permanent) to HTTPS version of page
-                if (useSsl && !currentConnectionSecured)
-                    filterContext.Result = new RedirectResult(_webHelper.GetThisPageUrl(true, true), true);
+            //page should be secured, so redirect (permanent) to HTTPS version of page
+            if (store.SslEnabled && !currentConnectionSecured)
+                context.Result = new RedirectResult(_webHelper.GetThisPageUrl(true, true), isPermanent);
 
-                //page shouldn't be secured, so redirect (permanent) to HTTP version of page
-                if (!useSsl && currentConnectionSecured)
-                    filterContext.Result = new RedirectResult(_webHelper.GetThisPageUrl(true, false), true);
-            }
+            //page shouldn't be secured, so redirect (permanent) to HTTP version of page
+            if (!store.SslEnabled && currentConnectionSecured)
+                context.Result = new RedirectResult(_webHelper.GetThisPageUrl(true, false), isPermanent);
+        }
 
-            #endregion
+        #endregion
 
-            #region Methods
+        #region Methods
 
-            /// <summary>
-            /// Called early in the filter pipeline to confirm request is authorized
-            /// </summary>
-            /// <param name="filterContext">Authorization filter context</param>
-            public void OnAuthorization(AuthorizationFilterContext filterContext)
-            {
-                if (filterContext == null)
-                    throw new ArgumentNullException(nameof(filterContext));
-
-                if (filterContext.HttpContext.Request == null)
-                    return;
-
-                //only in GET requests, otherwise the browser might not propagate the verb and request body correctly
-                if (!filterContext.HttpContext.Request.Method.Equals(WebRequestMethods.Http.Get, StringComparison.InvariantCultureIgnoreCase))
-                    return;
-
-                if (!DataSettingsManager.DatabaseIsInstalled)
-                    return;
-
-                RedirectRequest(filterContext, _storeContext.CurrentStore.SslEnabled);
-            }
-
-            #endregion
+        /// <summary>
+        /// Called early in the filter pipeline to confirm request is authorized
+        /// </summary>
+        /// <param name="context">Authorization filter context</param>
+        /// <returns>A task that represents the asynchronous operation</returns>
+        public async Task OnAuthorizationAsync(AuthorizationFilterContext context)
+        {
+            await CheckHttpsRequirementAsync(context);
         }
 
         #endregion
     }
+
+    #endregion
 }

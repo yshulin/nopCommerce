@@ -2,7 +2,7 @@
 
 @if (Model.Id > 0)
 {
-    <div class="panel-body">
+    <div class="card-body">
         @await Html.PartialAsync("Table", new DataTablesModel
    {
        Name = "productattributevalues-grid",
@@ -47,9 +47,8 @@
                 new ColumnProperty(nameof(ProductAttributeValueModel.PictureThumbnailUrl))
                 {
                     Title = T("Admin.Catalog.Products.ProductAttributes.Attributes.Values.Fields.Picture").Text,
-                    Width = "200",
                     ClassName = NopColumnClassDefaults.CenterAll,
-                    Render = new RenderPicture()
+                    Render = new RenderPicture(width: 200)
                 },
                 new ColumnProperty(nameof(ProductAttributeValueModel.DisplayOrder))
                 {
@@ -76,18 +75,18 @@
     
         <script>
             function renderProductAttributeMappingValuesColumnEdit(data, type, row, meta) {
-                return '<button onclick=\"javascript:OpenWindow(\'@Url.Content("~/Admin/Product/ProductAttributeValueEditPopup/")' + data + '?btnId=btnRefresh&formId=productattribute-form\', 800, 750, true); return false;\" class="btn btn-default"><i class="fa fa-pencil"></i>@T("Admin.Common.Edit")</button>';
+                return '<button onclick=\"javascript:OpenWindow(\'@Url.Content("~/Admin/Product/ProductAttributeValueEditPopup/")' + data + '?btnId=btnRefresh&formId=productattribute-form\', 800, 750, true); return false;\" class="btn btn-default"><i class="fas fa-pencil-alt"></i>@T("Admin.Common.Edit").Text</button>';
             }
         </script>
     </div>
-    <div class="panel-footer">
+    <div class="card-footer">
         <button type="submit" id="btnAddNewValue" onclick="javascript:OpenWindow('@(Url.Action("ProductAttributeValueCreatePopup", "Product", new { productAttributeMappingId = Model.Id, btnId = "btnRefresh", formId = "productattribute-form" }))', 800, 750, true);return false;" class="btn btn-primary">
             @T("Admin.Catalog.Products.ProductAttributes.Attributes.Values.AddNew")
         </button>
-        <input type="submit" id="btnRefresh" style="display: none"/>
+        <button type="submit" id="btnRefresh" style="display: none"></button>
         <script>
-            $(document).ready(function() {
-                $('#btnRefresh').click(function() {
+            $(function() {
+                $('#btnRefresh').click(function () {
                     //refresh grid
                     updateTable('#productattributevalues-grid');
 
@@ -100,7 +99,7 @@
 }
 else
 {
-    <div class="panel-body">
+    <div class="card-body">
         @T("Admin.Catalog.Products.ProductAttributes.Attributes.Values.SaveBeforeEdit")
     </div>
 }

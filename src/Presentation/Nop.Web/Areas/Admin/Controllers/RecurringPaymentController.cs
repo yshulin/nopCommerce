@@ -1,6 +1,4 @@
-﻿using System;
-using System.Linq;
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using Nop.Services.Localization;
 using Nop.Services.Messages;
 using Nop.Services.Orders;
@@ -11,239 +9,227 @@ using Nop.Web.Areas.Admin.Models.Orders;
 using Nop.Web.Framework.Controllers;
 using Nop.Web.Framework.Mvc.Filters;
 
-namespace Nop.Web.Areas.Admin.Controllers
+namespace Nop.Web.Areas.Admin.Controllers;
+
+public partial class RecurringPaymentController : BaseAdminController
 {
-    public partial class RecurringPaymentController : BaseAdminController
+    #region Fields
+
+    protected readonly ILocalizationService _localizationService;
+    protected readonly INotificationService _notificationService;
+    protected readonly IOrderProcessingService _orderProcessingService;
+    protected readonly IOrderService _orderService;
+    protected readonly IPermissionService _permissionService;
+    protected readonly IRecurringPaymentModelFactory _recurringPaymentModelFactory;
+
+    #endregion Fields
+
+    #region Ctor
+
+    public RecurringPaymentController(ILocalizationService localizationService,
+        INotificationService notificationService,
+        IOrderProcessingService orderProcessingService,
+        IOrderService orderService,
+        IPermissionService permissionService,
+        IRecurringPaymentModelFactory recurringPaymentModelFactory)
     {
-        #region Fields
-
-        private readonly ILocalizationService _localizationService;
-        private readonly INotificationService _notificationService;
-        private readonly IOrderProcessingService _orderProcessingService;
-        private readonly IOrderService _orderService;
-        private readonly IPermissionService _permissionService;
-        private readonly IRecurringPaymentModelFactory _recurringPaymentModelFactory;
-
-        #endregion Fields
-
-        #region Ctor
-
-        public RecurringPaymentController(ILocalizationService localizationService,
-            INotificationService notificationService,
-            IOrderProcessingService orderProcessingService,
-            IOrderService orderService,
-            IPermissionService permissionService,
-            IRecurringPaymentModelFactory recurringPaymentModelFactory)
-        {
-            _localizationService = localizationService;
-            _notificationService = notificationService;
-            _orderProcessingService = orderProcessingService;
-            _orderService = orderService;
-            _permissionService = permissionService;
-            _recurringPaymentModelFactory = recurringPaymentModelFactory;
-        }
-
-        #endregion
-
-        #region Methods
-
-        public virtual IActionResult Index()
-        {
-            return RedirectToAction("List");
-        }
-
-        public virtual IActionResult List()
-        {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageRecurringPayments))
-                return AccessDeniedView();
-
-            //prepare model
-            var model = _recurringPaymentModelFactory.PrepareRecurringPaymentSearchModel(new RecurringPaymentSearchModel());
-
-            return View(model);
-        }
-
-        [HttpPost]
-        public virtual IActionResult List(RecurringPaymentSearchModel searchModel)
-        {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageRecurringPayments))
-                return AccessDeniedDataTablesJson();
-
-            //prepare model
-            var model = _recurringPaymentModelFactory.PrepareRecurringPaymentListModel(searchModel);
-
-            return Json(model);
-        }
-
-        public virtual IActionResult Edit(int id)
-        {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageRecurringPayments))
-                return AccessDeniedView();
-
-            //try to get a recurring payment with the specified id
-            var payment = _orderService.GetRecurringPaymentById(id);
-            if (payment == null || payment.Deleted)
-                return RedirectToAction("List");
-
-            //prepare model
-            var model = _recurringPaymentModelFactory.PrepareRecurringPaymentModel(null, payment);
-
-            return View(model);
-        }
-
-        [HttpPost, ParameterBasedOnFormName("save-continue", "continueEditing")]
-        [FormValueRequired("save", "save-continue")]
-        public virtual IActionResult Edit(RecurringPaymentModel model, bool continueEditing)
-        {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageRecurringPayments))
-                return AccessDeniedView();
-
-            //try to get a recurring payment with the specified id
-            var payment = _orderService.GetRecurringPaymentById(model.Id);
-            if (payment == null || payment.Deleted)
-                return RedirectToAction("List");
-
-            if (ModelState.IsValid)
-            {
-                payment = model.ToEntity(payment);
-                _orderService.UpdateRecurringPayment(payment);
-
-                _notificationService.SuccessNotification(_localizationService.GetResource("Admin.RecurringPayments.Updated"));
-
-                if (!continueEditing)
-                    return RedirectToAction("List");
-                
-                return RedirectToAction("Edit", new { id = payment.Id });
-            }
-
-            //prepare model
-            model = _recurringPaymentModelFactory.PrepareRecurringPaymentModel(model, payment, true);
-
-            //if we got this far, something failed, redisplay form
-            return View(model);
-        }
-
-        [HttpPost]
-        public virtual IActionResult Delete(int id)
-        {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageRecurringPayments))
-                return AccessDeniedView();
-
-            //try to get a recurring payment with the specified id
-            var payment = _orderService.GetRecurringPaymentById(id);
-            if (payment == null)
-                return RedirectToAction("List");
-
-            _orderService.DeleteRecurringPayment(payment);
-
-            _notificationService.SuccessNotification(_localizationService.GetResource("Admin.RecurringPayments.Deleted"));
-
-            return RedirectToAction("List");
-        }
-
-        [HttpPost]
-        public virtual IActionResult HistoryList(RecurringPaymentHistorySearchModel searchModel)
-        {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageRecurringPayments))
-                return AccessDeniedDataTablesJson();
-
-            //try to get a recurring payment with the specified id
-            var payment = _orderService.GetRecurringPaymentById(searchModel.RecurringPaymentId)
-                ?? throw new ArgumentException("No recurring payment found with the specified id");
-
-            //prepare model
-            var model = _recurringPaymentModelFactory.PrepareRecurringPaymentHistoryListModel(searchModel, payment);
-
-            return Json(model);
-        }
-
-        [HttpPost, ActionName("Edit")]
-        [FormValueRequired("processnextpayment")]
-        public virtual IActionResult ProcessNextPayment(int id)
-        {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageRecurringPayments))
-                return AccessDeniedView();
-
-            //try to get a recurring payment with the specified id
-            var payment = _orderService.GetRecurringPaymentById(id);
-            if (payment == null)
-                return RedirectToAction("List");
-
-            try
-            {
-                var errors = _orderProcessingService.ProcessNextRecurringPayment(payment).ToList();
-                if (errors.Any())
-                    errors.ForEach(error => _notificationService.ErrorNotification(error));
-                else
-                    _notificationService.SuccessNotification(_localizationService.GetResource("Admin.RecurringPayments.NextPaymentProcessed"));
-
-                //prepare model
-                var model = _recurringPaymentModelFactory.PrepareRecurringPaymentModel(null, payment);
-
-                //selected panel
-                SaveSelectedPanelName("recurringpayment-history", persistForTheNextRequest: false);
-
-                return View(model);
-            }
-            catch (Exception exc)
-            {
-                _notificationService.ErrorNotification(exc);
-
-                //prepare model
-                var model = _recurringPaymentModelFactory.PrepareRecurringPaymentModel(null, payment);
-
-                //selected panel
-                SaveSelectedPanelName("recurringpayment-history", persistForTheNextRequest: false);
-
-                return View(model);
-            }
-        }
-
-        [HttpPost, ActionName("Edit")]
-        [FormValueRequired("cancelpayment")]
-        public virtual IActionResult CancelRecurringPayment(int id)
-        {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageRecurringPayments))
-                return AccessDeniedView();
-
-            //try to get a recurring payment with the specified id
-            var payment = _orderService.GetRecurringPaymentById(id);
-            if (payment == null)
-                return RedirectToAction("List");
-
-            try
-            {
-                var errors = _orderProcessingService.CancelRecurringPayment(payment);
-                if (errors.Any())
-                {
-                    foreach (var error in errors)
-                        _notificationService.ErrorNotification(error);
-                }
-                else
-                    _notificationService.SuccessNotification(_localizationService.GetResource("Admin.RecurringPayments.Cancelled"));
-
-                //prepare model
-                var model = _recurringPaymentModelFactory.PrepareRecurringPaymentModel(null, payment);
-
-                //selected panel
-                SaveSelectedPanelName("recurringpayment-history", persistForTheNextRequest: false);
-
-                return View(model);
-            }
-            catch (Exception exc)
-            {
-                _notificationService.ErrorNotification(exc);
-
-                //prepare model
-                var model = _recurringPaymentModelFactory.PrepareRecurringPaymentModel(null, payment);
-
-                //selected panel
-                SaveSelectedPanelName("recurringpayment-history", persistForTheNextRequest: false);
-
-                return View(model);
-            }
-        }
-
-        #endregion
+        _localizationService = localizationService;
+        _notificationService = notificationService;
+        _orderProcessingService = orderProcessingService;
+        _orderService = orderService;
+        _permissionService = permissionService;
+        _recurringPaymentModelFactory = recurringPaymentModelFactory;
     }
+
+    #endregion
+
+    #region Methods
+
+    public virtual IActionResult Index()
+    {
+        return RedirectToAction("List");
+    }
+
+    [CheckPermission(StandardPermission.Orders.RECURRING_PAYMENTS_VIEW)]
+    public virtual async Task<IActionResult> List()
+    {
+        //prepare model
+        var model = await _recurringPaymentModelFactory.PrepareRecurringPaymentSearchModelAsync(new RecurringPaymentSearchModel());
+
+        return View(model);
+    }
+
+    [HttpPost]
+    [CheckPermission(StandardPermission.Orders.RECURRING_PAYMENTS_VIEW)]
+    public virtual async Task<IActionResult> List(RecurringPaymentSearchModel searchModel)
+    {
+        //prepare model
+        var model = await _recurringPaymentModelFactory.PrepareRecurringPaymentListModelAsync(searchModel);
+
+        return Json(model);
+    }
+
+    [CheckPermission(StandardPermission.Orders.RECURRING_PAYMENTS_VIEW)]
+    public virtual async Task<IActionResult> Edit(int id)
+    {
+        //try to get a recurring payment with the specified id
+        var payment = await _orderService.GetRecurringPaymentByIdAsync(id);
+        if (payment == null || payment.Deleted)
+            return RedirectToAction("List");
+
+        //prepare model
+        var model = await _recurringPaymentModelFactory.PrepareRecurringPaymentModelAsync(null, payment);
+
+        return View(model);
+    }
+
+    [HttpPost, ParameterBasedOnFormName("save-continue", "continueEditing")]
+    [FormValueRequired("save", "save-continue")]
+    [CheckPermission(StandardPermission.Orders.RECURRING_PAYMENTS_CREATE_EDIT_DELETE)]
+    public virtual async Task<IActionResult> Edit(RecurringPaymentModel model, bool continueEditing)
+    {
+        //try to get a recurring payment with the specified id
+        var payment = await _orderService.GetRecurringPaymentByIdAsync(model.Id);
+        if (payment == null || payment.Deleted)
+            return RedirectToAction("List");
+
+        if (ModelState.IsValid)
+        {
+            payment = model.ToEntity(payment);
+            await _orderService.UpdateRecurringPaymentAsync(payment);
+
+            _notificationService.SuccessNotification(await _localizationService.GetResourceAsync("Admin.RecurringPayments.Updated"));
+
+            if (!continueEditing)
+                return RedirectToAction("List");
+
+            return RedirectToAction("Edit", new { id = payment.Id });
+        }
+
+        //prepare model
+        model = await _recurringPaymentModelFactory.PrepareRecurringPaymentModelAsync(model, payment, true);
+
+        //if we got this far, something failed, redisplay form
+        return View(model);
+    }
+
+    [HttpPost]
+    [CheckPermission(StandardPermission.Orders.RECURRING_PAYMENTS_CREATE_EDIT_DELETE)]
+    public virtual async Task<IActionResult> Delete(int id)
+    {
+        //try to get a recurring payment with the specified id
+        var payment = await _orderService.GetRecurringPaymentByIdAsync(id);
+        if (payment == null)
+            return RedirectToAction("List");
+
+        await _orderService.DeleteRecurringPaymentAsync(payment);
+
+        _notificationService.SuccessNotification(await _localizationService.GetResourceAsync("Admin.RecurringPayments.Deleted"));
+
+        return RedirectToAction("List");
+    }
+
+    [HttpPost]
+    [CheckPermission(StandardPermission.Orders.RECURRING_PAYMENTS_VIEW)]
+    public virtual async Task<IActionResult> HistoryList(RecurringPaymentHistorySearchModel searchModel)
+    {
+        //try to get a recurring payment with the specified id
+        var payment = await _orderService.GetRecurringPaymentByIdAsync(searchModel.RecurringPaymentId)
+                      ?? throw new ArgumentException("No recurring payment found with the specified id");
+
+        //prepare model
+        var model = await _recurringPaymentModelFactory.PrepareRecurringPaymentHistoryListModelAsync(searchModel, payment);
+
+        return Json(model);
+    }
+
+    [HttpPost, ActionName("Edit")]
+    [FormValueRequired("processnextpayment")]
+    [CheckPermission(StandardPermission.Orders.RECURRING_PAYMENTS_CREATE_EDIT_DELETE)]
+    public virtual async Task<IActionResult> ProcessNextPayment(int id)
+    {
+        //try to get a recurring payment with the specified id
+        var payment = await _orderService.GetRecurringPaymentByIdAsync(id);
+        if (payment == null)
+            return RedirectToAction("List");
+
+        try
+        {
+            var errors = (await _orderProcessingService.ProcessNextRecurringPaymentAsync(payment)).ToList();
+            if (errors.Any())
+            {
+                foreach (var error in errors)
+                {
+                    _notificationService.ErrorNotification(error);
+                }
+            }
+            else
+                _notificationService.SuccessNotification(await _localizationService.GetResourceAsync("Admin.RecurringPayments.NextPaymentProcessed"));
+
+            //prepare model
+            var model = await _recurringPaymentModelFactory.PrepareRecurringPaymentModelAsync(null, payment);
+
+            //selected card
+            SaveSelectedCardName("recurringpayment-history");
+
+            return RedirectToAction("Edit", new { id = payment.Id });
+        }
+        catch (Exception exc)
+        {
+            await _notificationService.ErrorNotificationAsync(exc);
+
+            //prepare model
+            var model = await _recurringPaymentModelFactory.PrepareRecurringPaymentModelAsync(null, payment);
+
+            //selected card
+            SaveSelectedCardName("recurringpayment-history", persistForTheNextRequest: false);
+
+            return View(model);
+        }
+    }
+
+    [HttpPost, ActionName("Edit")]
+    [FormValueRequired("cancelpayment")]
+    [CheckPermission(StandardPermission.Orders.RECURRING_PAYMENTS_CREATE_EDIT_DELETE)]
+    public virtual async Task<IActionResult> CancelRecurringPayment(int id)
+    {
+        //try to get a recurring payment with the specified id
+        var payment = await _orderService.GetRecurringPaymentByIdAsync(id);
+        if (payment == null)
+            return RedirectToAction("List");
+
+        try
+        {
+            var errors = await _orderProcessingService.CancelRecurringPaymentAsync(payment);
+            if (errors.Any())
+            {
+                foreach (var error in errors)
+                    _notificationService.ErrorNotification(error);
+            }
+            else
+                _notificationService.SuccessNotification(await _localizationService.GetResourceAsync("Admin.RecurringPayments.Cancelled"));
+
+            //prepare model
+            var model = await _recurringPaymentModelFactory.PrepareRecurringPaymentModelAsync(null, payment);
+
+            //selected card
+            SaveSelectedCardName("recurringpayment-history");
+
+            return RedirectToAction("Edit", new { id = payment.Id });
+        }
+        catch (Exception exc)
+        {
+            await _notificationService.ErrorNotificationAsync(exc);
+
+            //prepare model
+            var model = await _recurringPaymentModelFactory.PrepareRecurringPaymentModelAsync(null, payment);
+
+            //selected card
+            SaveSelectedCardName("recurringpayment-history", persistForTheNextRequest: false);
+
+            return View(model);
+        }
+    }
+
+    #endregion
 }

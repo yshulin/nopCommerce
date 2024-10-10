@@ -1,127 +1,132 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using Microsoft.AspNetCore.Mvc.Rendering;
+﻿using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.AspNetCore.Mvc.ViewFeatures;
 using Microsoft.AspNetCore.Razor.TagHelpers;
 using Nop.Web.Framework.Extensions;
 
-namespace Nop.Web.Framework.TagHelpers.Admin
+namespace Nop.Web.Framework.TagHelpers.Admin;
+
+/// <summary>
+/// "nop-override-store-checkbox" tag helper
+/// </summary>
+[HtmlTargetElement("nop-override-store-checkbox", Attributes = FOR_ATTRIBUTE_NAME, TagStructure = TagStructure.WithoutEndTag)]
+public partial class NopOverrideStoreCheckboxHelper : TagHelper
 {
-    /// <summary>
-    /// nop-override-store-checkbox tag helper
-    /// </summary>
-    [HtmlTargetElement("nop-override-store-checkbox", Attributes = ForAttributeName, TagStructure = TagStructure.WithoutEndTag)]
-    public class NopOverrideStoreCheckboxHelper : TagHelper
+    #region Constants
+
+    protected const string FOR_ATTRIBUTE_NAME = "asp-for";
+    protected const string INPUT_ATTRIBUTE_NAME = "asp-input";
+    protected const string INPUT_2_ATTRIBUTE_NAME = "asp-input2";
+    protected const string STORE_SCOPE_ATTRIBUTE_NAME = "asp-store-scope";
+    protected const string PARENT_CONTAINER_ATTRIBUTE_NAME = "asp-parent-container";
+
+    #endregion
+
+    #region Fields
+
+    protected readonly IHtmlHelper _htmlHelper;
+
+    #endregion
+
+    #region Ctor
+
+    public NopOverrideStoreCheckboxHelper(IHtmlHelper htmlHelper)
     {
-        private const string ForAttributeName = "asp-for";
-        private const string InputAttributeName = "asp-input";
-        private const string Input2AttributeName = "asp-input2";
-        private const string StoreScopeAttributeName = "asp-store-scope";
-        private const string ParentContainerAttributeName = "asp-parent-container";
+        _htmlHelper = htmlHelper;
+    }
 
-        private readonly IHtmlHelper _htmlHelper;
+    #endregion
 
-        /// <summary>
-        /// An expression to be evaluated against the current model
-        /// </summary>
-        [HtmlAttributeName(ForAttributeName)]
-        public ModelExpression For { get; set; }
+    #region Methods
 
-        /// <summary>
-        /// The input #1
-        /// </summary>
-        [HtmlAttributeName(InputAttributeName)]
-        public ModelExpression Input { set; get; }
+    /// <summary>
+    /// Asynchronously executes the tag helper with the given context and output
+    /// </summary>
+    /// <param name="context">Contains information associated with the current HTML tag</param>
+    /// <param name="output">A stateful HTML element used to generate an HTML tag</param>
+    /// <returns>A task that represents the asynchronous operation</returns>
+    public override async Task ProcessAsync(TagHelperContext context, TagHelperOutput output)
+    {
+        ArgumentNullException.ThrowIfNull(context);
 
-        /// <summary>
-        /// The input #2
-        /// </summary>
-        [HtmlAttributeName(Input2AttributeName)]
-        public ModelExpression Input2 { set; get; }
+        ArgumentNullException.ThrowIfNull(output);
 
-        /// <summary>
-        ///The store scope
-        /// </summary>
-        [HtmlAttributeName(StoreScopeAttributeName)]
-        public int StoreScope { set; get; }
+        //clear the output
+        output.SuppressOutput();
 
-        /// <summary>
-        /// Parent container
-        /// </summary>
-        [HtmlAttributeName(ParentContainerAttributeName)]
-        public string ParentContainer { set; get; }
-
-        /// <summary>
-        /// ViewContext
-        /// </summary>
-        [HtmlAttributeNotBound]
-        [ViewContext]
-        public ViewContext ViewContext { get; set; }
-
-        /// <summary>
-        /// Ctor
-        /// </summary>
-        /// <param name="htmlHelper">HTML helper</param>
-        public NopOverrideStoreCheckboxHelper(IHtmlHelper htmlHelper)
+        //render only when a certain store is chosen
+        if (StoreScope > 0)
         {
-            _htmlHelper = htmlHelper;
-        }
+            //contextualize IHtmlHelper
+            var viewContextAware = _htmlHelper as IViewContextAware;
+            viewContextAware?.Contextualize(ViewContext);
 
-        /// <summary>
-        /// Process
-        /// </summary>
-        /// <param name="context">Context</param>
-        /// <param name="output">Output</param>
-        public override void Process(TagHelperContext context, TagHelperOutput output)
-        {
-            if (context == null)
+            var dataInputIds = new List<string>();
+            if (Input != null)
+                dataInputIds.Add(_htmlHelper.Id(Input.Name));
+            if (Input2 != null)
+                dataInputIds.Add(_htmlHelper.Id(Input2.Name));
+
+            const string cssClass = "multi-store-override-option";
+            var dataInputSelector = "";
+            if (!string.IsNullOrEmpty(ParentContainer))
+                dataInputSelector = "#" + ParentContainer + " input, #" + ParentContainer + " textarea, #" + ParentContainer + " select";
+
+            if (dataInputIds.Any())
+                dataInputSelector = "#" + string.Join(", #", dataInputIds);
+
+            var onClick = $"checkOverriddenStoreValue(this, '{dataInputSelector}')";
+
+            var htmlAttributes = new
             {
-                throw new ArgumentNullException(nameof(context));
-            }
-
-            if (output == null)
-            {
-                throw new ArgumentNullException(nameof(output));
-            }
-
-            //clear the output
-            output.SuppressOutput();
-
-            //render only when a certain store is chosen
-            if (StoreScope > 0)
-            {
-                //contextualize IHtmlHelper
-                var viewContextAware = _htmlHelper as IViewContextAware;
-                viewContextAware?.Contextualize(ViewContext);
-
-                var dataInputIds = new List<string>();
-                if (Input != null)
-                    dataInputIds.Add(_htmlHelper.Id(Input.Name));
-                if (Input2 != null)
-                    dataInputIds.Add(_htmlHelper.Id(Input2.Name));
-
-                const string cssClass = "multi-store-override-option";
-                var dataInputSelector = "";
-                if (!string.IsNullOrEmpty(ParentContainer))
-                {
-                    dataInputSelector = "#" + ParentContainer + " input, #" + ParentContainer + " textarea, #" + ParentContainer + " select";
-                }
-                if (dataInputIds.Any())
-                {
-                    dataInputSelector = "#" + string.Join(", #", dataInputIds);
-                }
-                var onClick = $"checkOverriddenStoreValue(this, '{dataInputSelector}')";
-
-                var htmlAttributes = new
-                {
-                    @class = cssClass,
-                    onclick = onClick,
-                    data_for_input_selector = dataInputSelector
-                };
-                var htmlOutput = _htmlHelper.CheckBox(For.Name, null, htmlAttributes);
-                output.Content.SetHtmlContent(htmlOutput.RenderHtmlContent());
-            }
+                @class = cssClass,
+                onclick = onClick,
+                data_for_input_selector = dataInputSelector
+            };
+            var htmlOutput = await _htmlHelper.CheckBox(For.Name, null, htmlAttributes).RenderHtmlContentAsync();
+            output.Content.SetHtmlContent(htmlOutput);
         }
     }
+
+    #endregion
+
+    #region Properties
+
+    /// <summary>
+    /// An expression to be evaluated against the current model
+    /// </summary>
+    [HtmlAttributeName(FOR_ATTRIBUTE_NAME)]
+    public ModelExpression For { get; set; }
+
+    /// <summary>
+    /// The input #1
+    /// </summary>
+    [HtmlAttributeName(INPUT_ATTRIBUTE_NAME)]
+    public ModelExpression Input { set; get; }
+
+    /// <summary>
+    /// The input #2
+    /// </summary>
+    [HtmlAttributeName(INPUT_2_ATTRIBUTE_NAME)]
+    public ModelExpression Input2 { set; get; }
+
+    /// <summary>
+    ///The store scope
+    /// </summary>
+    [HtmlAttributeName(STORE_SCOPE_ATTRIBUTE_NAME)]
+    public int StoreScope { set; get; }
+
+    /// <summary>
+    /// Parent container
+    /// </summary>
+    [HtmlAttributeName(PARENT_CONTAINER_ATTRIBUTE_NAME)]
+    public string ParentContainer { set; get; }
+
+    /// <summary>
+    /// ViewContext
+    /// </summary>
+    [HtmlAttributeNotBound]
+    [ViewContext]
+    public ViewContext ViewContext { get; set; }
+
+    #endregion
 }

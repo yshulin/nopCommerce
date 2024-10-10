@@ -1,7 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using Nop.Core.Domain.Catalog;
 using Nop.Services.Catalog;
 using Nop.Services.Localization;
@@ -14,429 +11,514 @@ using Nop.Web.Areas.Admin.Models.Catalog;
 using Nop.Web.Framework.Mvc;
 using Nop.Web.Framework.Mvc.Filters;
 
-namespace Nop.Web.Areas.Admin.Controllers
+namespace Nop.Web.Areas.Admin.Controllers;
+
+public partial class SpecificationAttributeController : BaseAdminController
 {
-    public partial class SpecificationAttributeController : BaseAdminController
+    #region Fields
+
+    protected readonly ICustomerActivityService _customerActivityService;
+    protected readonly ILocalizationService _localizationService;
+    protected readonly ILocalizedEntityService _localizedEntityService;
+    protected readonly INotificationService _notificationService;
+    protected readonly IPermissionService _permissionService;
+    protected readonly ISpecificationAttributeModelFactory _specificationAttributeModelFactory;
+    protected readonly ISpecificationAttributeService _specificationAttributeService;
+
+    #endregion Fields
+
+    #region Ctor
+
+    public SpecificationAttributeController(ICustomerActivityService customerActivityService,
+        ILocalizationService localizationService,
+        ILocalizedEntityService localizedEntityService,
+        INotificationService notificationService,
+        IPermissionService permissionService,
+        ISpecificationAttributeModelFactory specificationAttributeModelFactory,
+        ISpecificationAttributeService specificationAttributeService)
     {
-        #region Fields
+        _customerActivityService = customerActivityService;
+        _localizationService = localizationService;
+        _localizedEntityService = localizedEntityService;
+        _notificationService = notificationService;
+        _permissionService = permissionService;
+        _specificationAttributeModelFactory = specificationAttributeModelFactory;
+        _specificationAttributeService = specificationAttributeService;
+    }
 
-        private readonly ICustomerActivityService _customerActivityService;
-        private readonly ILocalizationService _localizationService;
-        private readonly ILocalizedEntityService _localizedEntityService;
-        private readonly INotificationService _notificationService;
-        private readonly IPermissionService _permissionService;
-        private readonly ISpecificationAttributeModelFactory _specificationAttributeModelFactory;
-        private readonly ISpecificationAttributeService _specificationAttributeService;
+    #endregion
 
-        #endregion Fields
+    #region Utilities
 
-        #region Ctor
-
-        public SpecificationAttributeController(ICustomerActivityService customerActivityService,
-            ILocalizationService localizationService,
-            ILocalizedEntityService localizedEntityService,
-            INotificationService notificationService,
-            IPermissionService permissionService,
-            ISpecificationAttributeModelFactory specificationAttributeModelFactory,
-            ISpecificationAttributeService specificationAttributeService)
+    protected virtual async Task UpdateAttributeLocalesAsync(SpecificationAttribute specificationAttribute, SpecificationAttributeModel model)
+    {
+        foreach (var localized in model.Locales)
         {
-            _customerActivityService = customerActivityService;
-            _localizationService = localizationService;
-            _localizedEntityService = localizedEntityService;
-            _notificationService = notificationService;
-            _permissionService = permissionService;
-            _specificationAttributeModelFactory = specificationAttributeModelFactory;
-            _specificationAttributeService = specificationAttributeService;
+            await _localizedEntityService.SaveLocalizedValueAsync(specificationAttribute,
+                x => x.Name,
+                localized.Name,
+                localized.LanguageId);
+        }
+    }
+
+    protected virtual async Task UpdateAttributeGroupLocalesAsync(SpecificationAttributeGroup specificationAttributeGroup, SpecificationAttributeGroupModel model)
+    {
+        foreach (var localized in model.Locales)
+        {
+            await _localizedEntityService.SaveLocalizedValueAsync(specificationAttributeGroup,
+                x => x.Name,
+                localized.Name,
+                localized.LanguageId);
+        }
+    }
+
+    protected virtual async Task UpdateOptionLocalesAsync(SpecificationAttributeOption specificationAttributeOption, SpecificationAttributeOptionModel model)
+    {
+        foreach (var localized in model.Locales)
+        {
+            await _localizedEntityService.SaveLocalizedValueAsync(specificationAttributeOption,
+                x => x.Name,
+                localized.Name,
+                localized.LanguageId);
+        }
+    }
+
+    #endregion
+
+    #region Specification attributes
+
+    public virtual IActionResult Index()
+    {
+        return RedirectToAction("List");
+    }
+
+    [CheckPermission(StandardPermission.Catalog.SPECIFICATION_ATTRIBUTES_VIEW)]
+    public virtual async Task<IActionResult> List()
+    {
+        var model = await _specificationAttributeModelFactory.PrepareSpecificationAttributeGroupSearchModelAsync(new SpecificationAttributeGroupSearchModel());
+
+        return View(model);
+    }
+
+    [HttpPost]
+    [CheckPermission(StandardPermission.Catalog.SPECIFICATION_ATTRIBUTES_VIEW)]
+    public virtual async Task<IActionResult> SpecificationAttributeGroupList(SpecificationAttributeGroupSearchModel searchModel)
+    {
+        var model = await _specificationAttributeModelFactory.PrepareSpecificationAttributeGroupListModelAsync(searchModel);
+
+        return Json(model);
+    }
+
+    [HttpPost]
+    [CheckPermission(StandardPermission.Catalog.SPECIFICATION_ATTRIBUTES_VIEW)]
+    public virtual async Task<IActionResult> SpecificationAttributeList(SpecificationAttributeSearchModel searchModel)
+    {
+        SpecificationAttributeGroup group = null;
+
+        if (searchModel.SpecificationAttributeGroupId > 0)
+        {
+            group = await _specificationAttributeService.GetSpecificationAttributeGroupByIdAsync(searchModel.SpecificationAttributeGroupId)
+                ?? throw new ArgumentException("No specification attribute group found with the specified id");
         }
 
-        #endregion
+        var model = await _specificationAttributeModelFactory.PrepareSpecificationAttributeListModelAsync(searchModel, group);
 
-        #region Utilities
+        return Json(model);
+    }
 
-        protected virtual void UpdateAttributeLocales(SpecificationAttribute specificationAttribute, SpecificationAttributeModel model)
+    [CheckPermission(StandardPermission.Catalog.SPECIFICATION_ATTRIBUTES_CREATE_EDIT_DELETE)]
+    public virtual async Task<IActionResult> CreateSpecificationAttributeGroup()
+    {
+        var model = await _specificationAttributeModelFactory.PrepareSpecificationAttributeGroupModelAsync(new SpecificationAttributeGroupModel(), null);
+
+        return View(model);
+    }
+
+    [HttpPost, ParameterBasedOnFormName("save-continue", "continueEditing")]
+    [CheckPermission(StandardPermission.Catalog.SPECIFICATION_ATTRIBUTES_CREATE_EDIT_DELETE)]
+    public virtual async Task<IActionResult> CreateSpecificationAttributeGroup(SpecificationAttributeGroupModel model, bool continueEditing)
+    {
+        if (ModelState.IsValid)
         {
-            foreach (var localized in model.Locales)
-            {
-                _localizedEntityService.SaveLocalizedValue(specificationAttribute,
-                    x => x.Name,
-                    localized.Name,
-                    localized.LanguageId);
-            }
+            var specificationAttributeGroup = model.ToEntity<SpecificationAttributeGroup>();
+            await _specificationAttributeService.InsertSpecificationAttributeGroupAsync(specificationAttributeGroup);
+            await UpdateAttributeGroupLocalesAsync(specificationAttributeGroup, model);
+
+            await _customerActivityService.InsertActivityAsync("AddNewSpecAttributeGroup",
+                string.Format(await _localizationService.GetResourceAsync("ActivityLog.AddNewSpecAttributeGroup"), specificationAttributeGroup.Name), specificationAttributeGroup);
+
+            _notificationService.SuccessNotification(await _localizationService.GetResourceAsync("Admin.Catalog.Attributes.SpecificationAttributes.SpecificationAttributeGroup.Added"));
+
+            if (!continueEditing)
+                return RedirectToAction("List");
+
+            return RedirectToAction("EditSpecificationAttributeGroup", new { id = specificationAttributeGroup.Id });
         }
 
-        protected virtual void UpdateOptionLocales(SpecificationAttributeOption specificationAttributeOption, SpecificationAttributeOptionModel model)
+        model = await _specificationAttributeModelFactory.PrepareSpecificationAttributeGroupModelAsync(model, null, true);
+
+        //if we got this far, something failed, redisplay form
+        return View(model);
+    }
+
+    [CheckPermission(StandardPermission.Catalog.SPECIFICATION_ATTRIBUTES_CREATE_EDIT_DELETE)]
+    public virtual async Task<IActionResult> CreateSpecificationAttribute()
+    {
+        var model = await _specificationAttributeModelFactory.PrepareSpecificationAttributeModelAsync(new SpecificationAttributeModel(), null);
+
+        return View(model);
+    }
+
+    [HttpPost, ParameterBasedOnFormName("save-continue", "continueEditing")]
+    [CheckPermission(StandardPermission.Catalog.SPECIFICATION_ATTRIBUTES_CREATE_EDIT_DELETE)]
+    public virtual async Task<IActionResult> CreateSpecificationAttribute(SpecificationAttributeModel model, bool continueEditing)
+    {
+        if (ModelState.IsValid)
         {
-            foreach (var localized in model.Locales)
-            {
-                _localizedEntityService.SaveLocalizedValue(specificationAttributeOption,
-                    x => x.Name,
-                    localized.Name,
-                    localized.LanguageId);
-            }
+            var specificationAttribute = model.ToEntity<SpecificationAttribute>();
+            await _specificationAttributeService.InsertSpecificationAttributeAsync(specificationAttribute);
+            await UpdateAttributeLocalesAsync(specificationAttribute, model);
+
+            await _customerActivityService.InsertActivityAsync("AddNewSpecAttribute",
+                string.Format(await _localizationService.GetResourceAsync("ActivityLog.AddNewSpecAttribute"), specificationAttribute.Name), specificationAttribute);
+
+            _notificationService.SuccessNotification(await _localizationService.GetResourceAsync("Admin.Catalog.Attributes.SpecificationAttributes.SpecificationAttribute.Added"));
+
+            if (!continueEditing)
+                return RedirectToAction("List");
+
+            return RedirectToAction("EditSpecificationAttribute", new { id = specificationAttribute.Id });
         }
 
-        #endregion
+        model = await _specificationAttributeModelFactory.PrepareSpecificationAttributeModelAsync(model, null, true);
 
-        #region Specification attributes
+        //if we got this far, something failed, redisplay form
+        return View(model);
+    }
 
-        public virtual IActionResult Index()
-        {
+    [CheckPermission(StandardPermission.Catalog.SPECIFICATION_ATTRIBUTES_VIEW)]
+    public virtual async Task<IActionResult> EditSpecificationAttributeGroup(int id)
+    {
+        var specificationAttributeGroup = await _specificationAttributeService.GetSpecificationAttributeGroupByIdAsync(id);
+        if (specificationAttributeGroup == null)
             return RedirectToAction("List");
-        }
 
-        public virtual IActionResult List()
+        var model = await _specificationAttributeModelFactory.PrepareSpecificationAttributeGroupModelAsync(null, specificationAttributeGroup);
+
+        return View(model);
+    }
+
+    [HttpPost, ParameterBasedOnFormName("save-continue", "continueEditing")]
+    [CheckPermission(StandardPermission.Catalog.SPECIFICATION_ATTRIBUTES_CREATE_EDIT_DELETE)]
+    public virtual async Task<IActionResult> EditSpecificationAttributeGroup(SpecificationAttributeGroupModel model, bool continueEditing)
+    {
+        var specificationAttributeGroup = await _specificationAttributeService.GetSpecificationAttributeGroupByIdAsync(model.Id);
+        if (specificationAttributeGroup == null)
+            return RedirectToAction("List");
+
+        if (ModelState.IsValid)
         {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageAttributes))
-                return AccessDeniedView();
+            specificationAttributeGroup = model.ToEntity(specificationAttributeGroup);
+            await _specificationAttributeService.UpdateSpecificationAttributeGroupAsync(specificationAttributeGroup);
+            await UpdateAttributeGroupLocalesAsync(specificationAttributeGroup, model);
 
-            //prepare model
-            var model = _specificationAttributeModelFactory.PrepareSpecificationAttributeSearchModel(new SpecificationAttributeSearchModel());
+            await _customerActivityService.InsertActivityAsync("EditSpecAttributeGroup",
+                string.Format(await _localizationService.GetResourceAsync("ActivityLog.EditSpecAttributeGroup"), specificationAttributeGroup.Name), specificationAttributeGroup);
 
-            return View(model);
-        }
+            _notificationService.SuccessNotification(await _localizationService.GetResourceAsync("Admin.Catalog.Attributes.SpecificationAttributes.SpecificationAttributeGroup.Updated"));
 
-        [HttpPost]
-        public virtual IActionResult List(SpecificationAttributeSearchModel searchModel)
-        {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageAttributes))
-                return AccessDeniedDataTablesJson();
-
-            //prepare model
-            var model = _specificationAttributeModelFactory.PrepareSpecificationAttributeListModel(searchModel);
-
-            return Json(model);
-        }
-
-        public virtual IActionResult Create()
-        {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageAttributes))
-                return AccessDeniedView();
-
-            //prepare model
-            var model = _specificationAttributeModelFactory.PrepareSpecificationAttributeModel(new SpecificationAttributeModel(), null);
-
-            return View(model);
-        }
-
-        [HttpPost, ParameterBasedOnFormName("save-continue", "continueEditing")]
-        public virtual IActionResult Create(SpecificationAttributeModel model, bool continueEditing)
-        {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageAttributes))
-                return AccessDeniedView();
-
-            if (ModelState.IsValid)
-            {
-                var specificationAttribute = model.ToEntity<SpecificationAttribute>();
-                _specificationAttributeService.InsertSpecificationAttribute(specificationAttribute);
-                UpdateAttributeLocales(specificationAttribute, model);
-
-                //activity log
-                _customerActivityService.InsertActivity("AddNewSpecAttribute",
-                    string.Format(_localizationService.GetResource("ActivityLog.AddNewSpecAttribute"), specificationAttribute.Name), specificationAttribute);
-
-                _notificationService.SuccessNotification(_localizationService.GetResource("Admin.Catalog.Attributes.SpecificationAttributes.Added"));
-
-                if (!continueEditing)
-                    return RedirectToAction("List");
-                
-                return RedirectToAction("Edit", new { id = specificationAttribute.Id });
-            }
-
-            //prepare model
-            model = _specificationAttributeModelFactory.PrepareSpecificationAttributeModel(model, null, true);
-
-            //if we got this far, something failed, redisplay form
-            return View(model);
-        }
-
-        //edit
-        public virtual IActionResult Edit(int id)
-        {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageAttributes))
-                return AccessDeniedView();
-
-            //try to get a specification attribute with the specified id
-            var specificationAttribute = _specificationAttributeService.GetSpecificationAttributeById(id);
-            if (specificationAttribute == null)
+            if (!continueEditing)
                 return RedirectToAction("List");
 
-            //prepare model
-            var model = _specificationAttributeModelFactory.PrepareSpecificationAttributeModel(null, specificationAttribute);
-
-            return View(model);
+            return RedirectToAction("EditSpecificationAttributeGroup", new { id = specificationAttributeGroup.Id });
         }
 
-        [HttpPost, ParameterBasedOnFormName("save-continue", "continueEditing")]
-        public virtual IActionResult Edit(SpecificationAttributeModel model, bool continueEditing)
+        model = await _specificationAttributeModelFactory.PrepareSpecificationAttributeGroupModelAsync(model, specificationAttributeGroup, true);
+
+        //if we got this far, something failed, redisplay form
+        return View(model);
+    }
+
+    [CheckPermission(StandardPermission.Catalog.SPECIFICATION_ATTRIBUTES_VIEW)]
+    public virtual async Task<IActionResult> EditSpecificationAttribute(int id)
+    {
+        //try to get a specification attribute with the specified id
+        var specificationAttribute = await _specificationAttributeService.GetSpecificationAttributeByIdAsync(id);
+        if (specificationAttribute == null)
+            return RedirectToAction("List");
+
+        //prepare model
+        var model = await _specificationAttributeModelFactory.PrepareSpecificationAttributeModelAsync(null, specificationAttribute);
+
+        return View(model);
+    }
+
+    [HttpPost, ParameterBasedOnFormName("save-continue", "continueEditing")]
+    [CheckPermission(StandardPermission.Catalog.SPECIFICATION_ATTRIBUTES_CREATE_EDIT_DELETE)]
+    public virtual async Task<IActionResult> EditSpecificationAttribute(SpecificationAttributeModel model, bool continueEditing)
+    {
+        //try to get a specification attribute with the specified id
+        var specificationAttribute = await _specificationAttributeService.GetSpecificationAttributeByIdAsync(model.Id);
+        if (specificationAttribute == null)
+            return RedirectToAction("List");
+
+        if (ModelState.IsValid)
         {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageAttributes))
-                return AccessDeniedView();
+            specificationAttribute = model.ToEntity(specificationAttribute);
+            await _specificationAttributeService.UpdateSpecificationAttributeAsync(specificationAttribute);
 
-            //try to get a specification attribute with the specified id
-            var specificationAttribute = _specificationAttributeService.GetSpecificationAttributeById(model.Id);
-            if (specificationAttribute == null)
-                return RedirectToAction("List");
-
-            if (ModelState.IsValid)
-            {
-                specificationAttribute = model.ToEntity(specificationAttribute);
-                _specificationAttributeService.UpdateSpecificationAttribute(specificationAttribute);
-
-                UpdateAttributeLocales(specificationAttribute, model);
-
-                //activity log
-                _customerActivityService.InsertActivity("EditSpecAttribute",
-                    string.Format(_localizationService.GetResource("ActivityLog.EditSpecAttribute"), specificationAttribute.Name), specificationAttribute);
-
-                _notificationService.SuccessNotification(_localizationService.GetResource("Admin.Catalog.Attributes.SpecificationAttributes.Updated"));
-
-                if (!continueEditing)
-                    return RedirectToAction("List");
-                
-                return RedirectToAction("Edit", new { id = specificationAttribute.Id });
-            }
-
-            //prepare model
-            model = _specificationAttributeModelFactory.PrepareSpecificationAttributeModel(model, specificationAttribute, true);
-
-            //if we got this far, something failed, redisplay form
-            return View(model);
-        }
-
-        [HttpPost]
-        public virtual IActionResult Delete(int id)
-        {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageAttributes))
-                return AccessDeniedView();
-
-            //try to get a specification attribute with the specified id
-            var specificationAttribute = _specificationAttributeService.GetSpecificationAttributeById(id);
-            if (specificationAttribute == null)
-                return RedirectToAction("List");
-
-            _specificationAttributeService.DeleteSpecificationAttribute(specificationAttribute);
+            await UpdateAttributeLocalesAsync(specificationAttribute, model);
 
             //activity log
-            _customerActivityService.InsertActivity("DeleteSpecAttribute",
-                string.Format(_localizationService.GetResource("ActivityLog.DeleteSpecAttribute"), specificationAttribute.Name), specificationAttribute);
+            await _customerActivityService.InsertActivityAsync("EditSpecAttribute",
+                string.Format(await _localizationService.GetResourceAsync("ActivityLog.EditSpecAttribute"), specificationAttribute.Name), specificationAttribute);
 
-            _notificationService.SuccessNotification(_localizationService.GetResource("Admin.Catalog.Attributes.SpecificationAttributes.Deleted"));
+            _notificationService.SuccessNotification(await _localizationService.GetResourceAsync("Admin.Catalog.Attributes.SpecificationAttributes.SpecificationAttribute.Updated"));
 
-            return RedirectToAction("List");
-        }
-
-        [HttpPost]
-        public virtual IActionResult DeleteSelected(ICollection<int> selectedIds)
-        {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageAttributes))
-                return AccessDeniedView();
-
-            if (selectedIds != null)
-            {
-                var specificationAttributes = _specificationAttributeService.GetSpecificationAttributeByIds(selectedIds.ToArray());
-                _specificationAttributeService.DeleteSpecificationAttributes(specificationAttributes);
-
-                foreach (var specificationAttribute in specificationAttributes)
-                {
-                    //activity log
-                    _customerActivityService.InsertActivity("DeleteSpecAttribute",
-                        string.Format(_localizationService.GetResource("ActivityLog.DeleteSpecAttribute"), specificationAttribute.Name), specificationAttribute);
-                }
-            }
-
-            return Json(new { Result = true });
-        }
-
-        #endregion
-
-        #region Specification attribute options
-
-        [HttpPost]
-        public virtual IActionResult OptionList(SpecificationAttributeOptionSearchModel searchModel)
-        {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageAttributes))
-                return AccessDeniedDataTablesJson();
-
-            //try to get a specification attribute with the specified id
-            var specificationAttribute = _specificationAttributeService.GetSpecificationAttributeById(searchModel.SpecificationAttributeId)
-                ?? throw new ArgumentException("No specification attribute found with the specified id");
-
-            //prepare model
-            var model = _specificationAttributeModelFactory.PrepareSpecificationAttributeOptionListModel(searchModel, specificationAttribute);
-
-            return Json(model);
-        }
-
-        public virtual IActionResult OptionCreatePopup(int specificationAttributeId)
-        {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageAttributes))
-                return AccessDeniedView();
-
-            //try to get a specification attribute with the specified id
-            var specificationAttribute = _specificationAttributeService.GetSpecificationAttributeById(specificationAttributeId);
-            if (specificationAttribute == null)
+            if (!continueEditing)
                 return RedirectToAction("List");
 
-            //prepare model
-            var model = _specificationAttributeModelFactory
-                .PrepareSpecificationAttributeOptionModel(new SpecificationAttributeOptionModel(), specificationAttribute, null);
-
-            return View(model);
+            return RedirectToAction("EditSpecificationAttribute", new { id = specificationAttribute.Id });
         }
 
-        [HttpPost]
-        public virtual IActionResult OptionCreatePopup(SpecificationAttributeOptionModel model)
-        {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageAttributes))
-                return AccessDeniedView();
+        //prepare model
+        model = await _specificationAttributeModelFactory.PrepareSpecificationAttributeModelAsync(model, specificationAttribute, true);
 
-            //try to get a specification attribute with the specified id
-            var specificationAttribute = _specificationAttributeService.GetSpecificationAttributeById(model.SpecificationAttributeId);
-            if (specificationAttribute == null)
-                return RedirectToAction("List");
-
-            if (ModelState.IsValid)
-            {
-                var sao = model.ToEntity<SpecificationAttributeOption>();
-
-                //clear "Color" values if it's disabled
-                if (!model.EnableColorSquaresRgb)
-                    sao.ColorSquaresRgb = null;
-
-                _specificationAttributeService.InsertSpecificationAttributeOption(sao);
-
-                UpdateOptionLocales(sao, model);
-
-                ViewBag.RefreshPage = true;
-
-                return View(model);
-            }
-
-            //prepare model
-            model = _specificationAttributeModelFactory.PrepareSpecificationAttributeOptionModel(model, specificationAttribute, null, true);
-
-            //if we got this far, something failed, redisplay form
-            return View(model);
-        }
-
-        public virtual IActionResult OptionEditPopup(int id)
-        {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageAttributes))
-                return AccessDeniedView();
-
-            //try to get a specification attribute option with the specified id
-            var specificationAttributeOption = _specificationAttributeService.GetSpecificationAttributeOptionById(id);
-            if (specificationAttributeOption == null)
-                return RedirectToAction("List");
-
-            //try to get a specification attribute with the specified id
-            var specificationAttribute = _specificationAttributeService
-                .GetSpecificationAttributeById(specificationAttributeOption.SpecificationAttributeId);
-            if (specificationAttribute == null)
-                return RedirectToAction("List");
-
-            //prepare model
-            var model = _specificationAttributeModelFactory
-                .PrepareSpecificationAttributeOptionModel(null, specificationAttribute, specificationAttributeOption);
-
-            return View(model);
-        }
-
-        [HttpPost]
-        public virtual IActionResult OptionEditPopup(SpecificationAttributeOptionModel model)
-        {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageAttributes))
-                return AccessDeniedView();
-
-            //try to get a specification attribute option with the specified id
-            var specificationAttributeOption = _specificationAttributeService.GetSpecificationAttributeOptionById(model.Id);
-            if (specificationAttributeOption == null)
-                return RedirectToAction("List");
-
-            //try to get a specification attribute with the specified id
-            var specificationAttribute = _specificationAttributeService
-                .GetSpecificationAttributeById(specificationAttributeOption.SpecificationAttributeId);
-            if (specificationAttribute == null)
-                return RedirectToAction("List");
-
-            if (ModelState.IsValid)
-            {
-                specificationAttributeOption = model.ToEntity(specificationAttributeOption);
-
-                //clear "Color" values if it's disabled
-                if (!model.EnableColorSquaresRgb)
-                    specificationAttributeOption.ColorSquaresRgb = null;
-
-                _specificationAttributeService.UpdateSpecificationAttributeOption(specificationAttributeOption);
-
-                UpdateOptionLocales(specificationAttributeOption, model);
-
-                ViewBag.RefreshPage = true;
-
-                return View(model);
-            }
-
-            //prepare model
-            model = _specificationAttributeModelFactory
-                .PrepareSpecificationAttributeOptionModel(model, specificationAttribute, specificationAttributeOption, true);
-
-            //if we got this far, something failed, redisplay form
-            return View(model);
-        }
-
-        [HttpPost]
-        public virtual IActionResult OptionDelete(int id, int specificationAttributeId)
-        {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageAttributes))
-                return AccessDeniedView();
-
-            //try to get a specification attribute option with the specified id
-            var specificationAttributeOption = _specificationAttributeService.GetSpecificationAttributeOptionById(id)
-                ?? throw new ArgumentException("No specification attribute option found with the specified id", nameof(id));
-
-            _specificationAttributeService.DeleteSpecificationAttributeOption(specificationAttributeOption);
-
-            return new NullJsonResult();
-        }
-
-        [HttpGet]
-        public virtual IActionResult GetOptionsByAttributeId(string attributeId)
-        {
-            //do not make any permission validation here 
-            //because this method could be used on some other pages (such as product editing)
-            //if (!_permissionService.Authorize(StandardPermissionProvider.ManageAttributes))
-            //    return AccessDeniedView();
-
-            //this action method gets called via an ajax request
-            if (string.IsNullOrEmpty(attributeId))
-                throw new ArgumentNullException(nameof(attributeId));
-
-            var options = _specificationAttributeService.GetSpecificationAttributeOptionsBySpecificationAttribute(Convert.ToInt32(attributeId));
-            var result = (from o in options
-                          select new { id = o.Id, name = o.Name }).ToList();
-            return Json(result);
-        }
-
-        #endregion
-
-        #region Mapped products
-
-        [HttpPost]
-        public virtual IActionResult UsedByProducts(SpecificationAttributeProductSearchModel searchModel)
-        {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageAttributes))
-                return AccessDeniedDataTablesJson();
-
-            //try to get a specification attribute with the specified id
-            var specificationAttribute = _specificationAttributeService.GetSpecificationAttributeById(searchModel.SpecificationAttributeId)
-                ?? throw new ArgumentException("No specification attribute found with the specified id");
-
-            //prepare model
-            var model = _specificationAttributeModelFactory.PrepareSpecificationAttributeProductListModel(searchModel, specificationAttribute);
-
-            return Json(model);
-        }
-
-        #endregion
+        //if we got this far, something failed, redisplay form
+        return View(model);
     }
+
+    [HttpPost]
+    [CheckPermission(StandardPermission.Catalog.SPECIFICATION_ATTRIBUTES_CREATE_EDIT_DELETE)]
+    public virtual async Task<IActionResult> DeleteSpecificationAttributeGroup(int id)
+    {
+        var specificationAttributeGroup = await _specificationAttributeService.GetSpecificationAttributeGroupByIdAsync(id);
+        if (specificationAttributeGroup == null)
+            return RedirectToAction("List");
+
+        await _specificationAttributeService.DeleteSpecificationAttributeGroupAsync(specificationAttributeGroup);
+
+        await _customerActivityService.InsertActivityAsync("DeleteSpecAttributeGroup",
+            string.Format(await _localizationService.GetResourceAsync("ActivityLog.DeleteSpecAttributeGroup"), specificationAttributeGroup.Name), specificationAttributeGroup);
+
+        _notificationService.SuccessNotification(await _localizationService.GetResourceAsync("Admin.Catalog.Attributes.SpecificationAttributes.SpecificationAttributeGroup.Deleted"));
+
+        return RedirectToAction("List");
+    }
+
+    [HttpPost]
+    [CheckPermission(StandardPermission.Catalog.SPECIFICATION_ATTRIBUTES_CREATE_EDIT_DELETE)]
+    public virtual async Task<IActionResult> DeleteSpecificationAttribute(int id)
+    {
+        var specificationAttribute = await _specificationAttributeService.GetSpecificationAttributeByIdAsync(id);
+
+        if (specificationAttribute == null)
+            return RedirectToAction("List");
+
+        await _specificationAttributeService.DeleteSpecificationAttributeAsync(specificationAttribute);
+
+        await _customerActivityService.InsertActivityAsync("DeleteSpecAttribute",
+            string.Format(await _localizationService.GetResourceAsync("ActivityLog.DeleteSpecAttribute"), specificationAttribute.Name), specificationAttribute);
+
+        _notificationService.SuccessNotification(await _localizationService.GetResourceAsync("Admin.Catalog.Attributes.SpecificationAttributes.SpecificationAttribute.Deleted"));
+
+        return RedirectToAction("List");
+    }
+
+    [HttpPost]
+    [CheckPermission(StandardPermission.Catalog.SPECIFICATION_ATTRIBUTES_CREATE_EDIT_DELETE)]
+    public virtual async Task<IActionResult> DeleteSelectedSpecificationAttributes(ICollection<int> selectedIds)
+    {
+        if (selectedIds == null || !selectedIds.Any())
+            return NoContent();
+
+        var specificationAttributes = await _specificationAttributeService.GetSpecificationAttributeByIdsAsync(selectedIds.ToArray());
+        await _specificationAttributeService.DeleteSpecificationAttributesAsync(specificationAttributes);
+
+        foreach (var specificationAttribute in specificationAttributes)
+        {
+            await _customerActivityService.InsertActivityAsync("DeleteSpecAttribute",
+                string.Format(await _localizationService.GetResourceAsync("ActivityLog.DeleteSpecAttribute"), specificationAttribute.Name), specificationAttribute);
+        }
+
+        return Json(new { Result = true });
+    }
+
+    #endregion
+
+    #region Specification attribute options
+
+    [HttpPost]
+    [CheckPermission(StandardPermission.Catalog.SPECIFICATION_ATTRIBUTES_VIEW)]
+    public virtual async Task<IActionResult> OptionList(SpecificationAttributeOptionSearchModel searchModel)
+    {
+        //try to get a specification attribute with the specified id
+        var specificationAttribute = await _specificationAttributeService.GetSpecificationAttributeByIdAsync(searchModel.SpecificationAttributeId)
+            ?? throw new ArgumentException("No specification attribute found with the specified id");
+
+        //prepare model
+        var model = await _specificationAttributeModelFactory.PrepareSpecificationAttributeOptionListModelAsync(searchModel, specificationAttribute);
+
+        return Json(model);
+    }
+
+    [CheckPermission(StandardPermission.Catalog.SPECIFICATION_ATTRIBUTES_CREATE_EDIT_DELETE)]
+    public virtual async Task<IActionResult> OptionCreatePopup(int specificationAttributeId)
+    {
+        //try to get a specification attribute with the specified id
+        var specificationAttribute = await _specificationAttributeService.GetSpecificationAttributeByIdAsync(specificationAttributeId);
+        if (specificationAttribute == null)
+            return RedirectToAction("List");
+
+        //prepare model
+        var model = await _specificationAttributeModelFactory
+            .PrepareSpecificationAttributeOptionModelAsync(new SpecificationAttributeOptionModel(), specificationAttribute, null);
+
+        return View(model);
+    }
+
+    [HttpPost]
+    [CheckPermission(StandardPermission.Catalog.SPECIFICATION_ATTRIBUTES_CREATE_EDIT_DELETE)]
+    public virtual async Task<IActionResult> OptionCreatePopup(SpecificationAttributeOptionModel model)
+    {
+        //try to get a specification attribute with the specified id
+        var specificationAttribute = await _specificationAttributeService.GetSpecificationAttributeByIdAsync(model.SpecificationAttributeId);
+        if (specificationAttribute == null)
+            return RedirectToAction("List");
+
+        if (ModelState.IsValid)
+        {
+            var sao = model.ToEntity<SpecificationAttributeOption>();
+
+            //clear "Color" values if it's disabled
+            if (!model.EnableColorSquaresRgb)
+                sao.ColorSquaresRgb = null;
+
+            await _specificationAttributeService.InsertSpecificationAttributeOptionAsync(sao);
+
+            await UpdateOptionLocalesAsync(sao, model);
+
+            ViewBag.RefreshPage = true;
+
+            return View(model);
+        }
+
+        //prepare model
+        model = await _specificationAttributeModelFactory.PrepareSpecificationAttributeOptionModelAsync(model, specificationAttribute, null, true);
+
+        //if we got this far, something failed, redisplay form
+        return View(model);
+    }
+
+    [CheckPermission(StandardPermission.Catalog.SPECIFICATION_ATTRIBUTES_VIEW)]
+    public virtual async Task<IActionResult> OptionEditPopup(int id)
+    {
+        //try to get a specification attribute option with the specified id
+        var specificationAttributeOption = await _specificationAttributeService.GetSpecificationAttributeOptionByIdAsync(id);
+        if (specificationAttributeOption == null)
+            return RedirectToAction("List");
+
+        //try to get a specification attribute with the specified id
+        var specificationAttribute = await _specificationAttributeService
+            .GetSpecificationAttributeByIdAsync(specificationAttributeOption.SpecificationAttributeId);
+        if (specificationAttribute == null)
+            return RedirectToAction("List");
+
+        //prepare model
+        var model = await _specificationAttributeModelFactory
+            .PrepareSpecificationAttributeOptionModelAsync(null, specificationAttribute, specificationAttributeOption);
+
+        return View(model);
+    }
+
+    [HttpPost]
+    [CheckPermission(StandardPermission.Catalog.SPECIFICATION_ATTRIBUTES_CREATE_EDIT_DELETE)]
+    public virtual async Task<IActionResult> OptionEditPopup(SpecificationAttributeOptionModel model)
+    {
+        //try to get a specification attribute option with the specified id
+        var specificationAttributeOption = await _specificationAttributeService.GetSpecificationAttributeOptionByIdAsync(model.Id);
+        if (specificationAttributeOption == null)
+            return RedirectToAction("List");
+
+        //try to get a specification attribute with the specified id
+        var specificationAttribute = await _specificationAttributeService
+            .GetSpecificationAttributeByIdAsync(specificationAttributeOption.SpecificationAttributeId);
+        if (specificationAttribute == null)
+            return RedirectToAction("List");
+
+        if (ModelState.IsValid)
+        {
+            specificationAttributeOption = model.ToEntity(specificationAttributeOption);
+
+            //clear "Color" values if it's disabled
+            if (!model.EnableColorSquaresRgb)
+                specificationAttributeOption.ColorSquaresRgb = null;
+
+            await _specificationAttributeService.UpdateSpecificationAttributeOptionAsync(specificationAttributeOption);
+
+            await UpdateOptionLocalesAsync(specificationAttributeOption, model);
+
+            ViewBag.RefreshPage = true;
+
+            return View(model);
+        }
+
+        //prepare model
+        model = await _specificationAttributeModelFactory
+            .PrepareSpecificationAttributeOptionModelAsync(model, specificationAttribute, specificationAttributeOption, true);
+
+        //if we got this far, something failed, redisplay form
+        return View(model);
+    }
+
+    [HttpPost]
+    [CheckPermission(StandardPermission.Catalog.SPECIFICATION_ATTRIBUTES_CREATE_EDIT_DELETE)]
+    public virtual async Task<IActionResult> OptionDelete(int id, int specificationAttributeId)
+    {
+        //try to get a specification attribute option with the specified id
+        var specificationAttributeOption = await _specificationAttributeService.GetSpecificationAttributeOptionByIdAsync(id)
+            ?? throw new ArgumentException("No specification attribute option found with the specified id", nameof(id));
+
+        await _specificationAttributeService.DeleteSpecificationAttributeOptionAsync(specificationAttributeOption);
+
+        return new NullJsonResult();
+    }
+
+    [HttpGet]
+    public virtual async Task<IActionResult> GetOptionsByAttributeId(string attributeId)
+    {
+        //do not make any permission validation here 
+        //because this method could be used on some other pages (such as product editing)
+        //if (!await _permissionService.AuthorizeAsync(StandardPermission.ManageAttributes))
+        //    return await AccessDeniedJsonAsync();
+
+        //this action method gets called via an ajax request
+        ArgumentException.ThrowIfNullOrEmpty(attributeId);
+
+        var options = await _specificationAttributeService.GetSpecificationAttributeOptionsBySpecificationAttributeAsync(Convert.ToInt32(attributeId));
+        var result = (from o in options
+            select new { id = o.Id, name = o.Name }).ToList();
+        return Json(result);
+    }
+
+    #endregion
+
+    #region Mapped products
+
+    [HttpPost]
+    [CheckPermission(StandardPermission.Catalog.SPECIFICATION_ATTRIBUTES_VIEW)]
+    [CheckPermission(StandardPermission.Catalog.PRODUCTS_VIEW)]
+    public virtual async Task<IActionResult> UsedByProducts(SpecificationAttributeProductSearchModel searchModel)
+    {
+        //try to get a specification attribute with the specified id
+        var specificationAttribute = await _specificationAttributeService.GetSpecificationAttributeByIdAsync(searchModel.SpecificationAttributeId)
+            ?? throw new ArgumentException("No specification attribute found with the specified id");
+
+        //prepare model
+        var model = await _specificationAttributeModelFactory.PrepareSpecificationAttributeProductListModelAsync(searchModel, specificationAttribute);
+
+        return Json(model);
+    }
+
+    #endregion
 }

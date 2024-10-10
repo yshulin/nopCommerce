@@ -1,81 +1,68 @@
-﻿using System;
-using System.Linq;
-using Nop.Core;
+﻿using Nop.Core;
 using Nop.Core.Domain.Catalog;
 using Nop.Core.Domain.Customers;
 using Nop.Data;
-using Nop.Services.Caching.Extensions;
-using Nop.Services.Common;
-using Nop.Services.Events;
 using Nop.Services.Messages;
 
-namespace Nop.Services.Catalog
+namespace Nop.Services.Catalog;
+
+/// <summary>
+/// Back in stock subscription service
+/// </summary>
+public partial class BackInStockSubscriptionService : IBackInStockSubscriptionService
 {
-    /// <summary>
-    /// Back in stock subscription service
-    /// </summary>
-    public partial class BackInStockSubscriptionService : IBackInStockSubscriptionService
+    #region Fields
+
+    protected readonly IRepository<BackInStockSubscription> _backInStockSubscriptionRepository;
+    protected readonly IRepository<Customer> _customerRepository;
+    protected readonly IRepository<Product> _productRepository;
+    protected readonly IWorkflowMessageService _workflowMessageService;
+
+    #endregion
+
+    #region Ctor
+
+    public BackInStockSubscriptionService(IRepository<BackInStockSubscription> backInStockSubscriptionRepository,
+        IRepository<Customer> customerRepository,
+        IRepository<Product> productRepository,
+        IWorkflowMessageService workflowMessageService)
     {
-        #region Fields
+        _backInStockSubscriptionRepository = backInStockSubscriptionRepository;
+        _customerRepository = customerRepository;
+        _productRepository = productRepository;
+        _workflowMessageService = workflowMessageService;
+    }
 
-        private readonly IEventPublisher _eventPublisher;
-        private readonly IGenericAttributeService _genericAttributeService;
-        private readonly IRepository<BackInStockSubscription> _backInStockSubscriptionRepository;
-        private readonly IRepository<Customer> _customerRepository;
-        private readonly IRepository<Product> _productRepository;
-        private readonly IWorkflowMessageService _workflowMessageService;
+    #endregion
 
-        #endregion
+    #region Methods
 
-        #region Ctor
+    /// <summary>
+    /// Delete a back in stock subscription
+    /// </summary>
+    /// <param name="subscription">Subscription</param>
+    /// <returns>A task that represents the asynchronous operation</returns>
+    public virtual async Task DeleteSubscriptionAsync(BackInStockSubscription subscription)
+    {
+        await _backInStockSubscriptionRepository.DeleteAsync(subscription);
+    }
 
-        public BackInStockSubscriptionService(IEventPublisher eventPublisher,
-            IGenericAttributeService genericAttributeService,
-            IRepository<BackInStockSubscription> backInStockSubscriptionRepository,
-            IRepository<Customer> customerRepository,
-            IRepository<Product> productRepository,
-            IWorkflowMessageService workflowMessageService)
+    /// <summary>
+    /// Gets all subscriptions
+    /// </summary>
+    /// <param name="customerId">Customer identifier</param>
+    /// <param name="storeId">Store identifier; pass 0 to load all records</param>
+    /// <param name="pageIndex">Page index</param>
+    /// <param name="pageSize">Page size</param>
+    /// <returns>
+    /// A task that represents the asynchronous operation
+    /// The task result contains the subscriptions
+    /// </returns>
+    public virtual async Task<IPagedList<BackInStockSubscription>> GetAllSubscriptionsByCustomerIdAsync(int customerId,
+        int storeId = 0, int pageIndex = 0, int pageSize = int.MaxValue)
+    {
+        return await _backInStockSubscriptionRepository.GetAllPagedAsync(query =>
         {
-            _eventPublisher = eventPublisher;
-            _genericAttributeService = genericAttributeService;
-            _backInStockSubscriptionRepository = backInStockSubscriptionRepository;
-            _customerRepository = customerRepository;
-            _productRepository = productRepository;
-            _workflowMessageService = workflowMessageService;
-        }
-
-        #endregion
-
-        #region Methods
-
-        /// <summary>
-        /// Delete a back in stock subscription
-        /// </summary>
-        /// <param name="subscription">Subscription</param>
-        public virtual void DeleteSubscription(BackInStockSubscription subscription)
-        {
-            if (subscription == null)
-                throw new ArgumentNullException(nameof(subscription));
-
-            _backInStockSubscriptionRepository.Delete(subscription);
-
-            //event notification
-            _eventPublisher.EntityDeleted(subscription);
-        }
-
-        /// <summary>
-        /// Gets all subscriptions
-        /// </summary>
-        /// <param name="customerId">Customer identifier</param>
-        /// <param name="storeId">Store identifier; pass 0 to load all records</param>
-        /// <param name="pageIndex">Page index</param>
-        /// <param name="pageSize">Page size</param>
-        /// <returns>Subscriptions</returns>
-        public virtual IPagedList<BackInStockSubscription> GetAllSubscriptionsByCustomerId(int customerId,
-            int storeId = 0, int pageIndex = 0, int pageSize = int.MaxValue)
-        {
-            var query = _backInStockSubscriptionRepository.Table;
-
             //customer
             query = query.Where(biss => biss.CustomerId == customerId);
 
@@ -91,21 +78,99 @@ namespace Nop.Services.Catalog
 
             query = query.OrderByDescending(biss => biss.CreatedOnUtc);
 
-            return new PagedList<BackInStockSubscription>(query, pageIndex, pageSize);
+            return query;
+        }, pageIndex, pageSize);
+    }
+
+    /// <summary>
+    /// Gets all subscriptions
+    /// </summary>
+    /// <param name="customerId">Customer id</param>
+    /// <param name="productId">Product identifier</param>
+    /// <param name="storeId">Store identifier</param>
+    /// <returns>
+    /// A task that represents the asynchronous operation
+    /// The task result contains the subscriptions
+    /// </returns>
+    public virtual async Task<BackInStockSubscription> FindSubscriptionAsync(int customerId, int productId, int storeId)
+    {
+        var query = from biss in _backInStockSubscriptionRepository.Table
+            orderby biss.CreatedOnUtc descending
+            where biss.CustomerId == customerId &&
+                  biss.ProductId == productId &&
+                  biss.StoreId == storeId
+            select biss;
+
+        var subscription = await query.FirstOrDefaultAsync();
+
+        return subscription;
+    }
+
+    /// <summary>
+    /// Gets a subscription
+    /// </summary>
+    /// <param name="subscriptionId">Subscription identifier</param>
+    /// <returns>
+    /// A task that represents the asynchronous operation
+    /// The task result contains the subscription
+    /// </returns>
+    public virtual async Task<BackInStockSubscription> GetSubscriptionByIdAsync(int subscriptionId)
+    {
+        return await _backInStockSubscriptionRepository.GetByIdAsync(subscriptionId, cache => default, useShortTermCache: true);
+    }
+
+    /// <summary>
+    /// Inserts subscription
+    /// </summary>
+    /// <param name="subscription">Subscription</param>
+    /// <returns>A task that represents the asynchronous operation</returns>
+    public virtual async Task InsertSubscriptionAsync(BackInStockSubscription subscription)
+    {
+        await _backInStockSubscriptionRepository.InsertAsync(subscription);
+    }
+
+    /// <summary>
+    /// Send notification to subscribers
+    /// </summary>
+    /// <param name="product">Product</param>
+    /// <returns>
+    /// A task that represents the asynchronous operation
+    /// The task result contains the number of sent email
+    /// </returns>
+    public virtual async Task<int> SendNotificationsToSubscribersAsync(Product product)
+    {
+        ArgumentNullException.ThrowIfNull(product);
+
+        var result = 0;
+        var subscriptions = await GetAllSubscriptionsByProductIdAsync(product.Id);
+        foreach (var subscription in subscriptions)
+        {
+            var customer = await _customerRepository.GetByIdAsync(subscription.CustomerId);
+            result += (await _workflowMessageService.SendBackInStockNotificationAsync(subscription, customer?.LanguageId ?? 0)).Count;
         }
 
-        /// <summary>
-        /// Gets all subscriptions
-        /// </summary>
-        /// <param name="productId">Product identifier</param>
-        /// <param name="storeId">Store identifier; pass 0 to load all records</param>
-        /// <param name="pageIndex">Page index</param>
-        /// <param name="pageSize">Page size</param>
-        /// <returns>Subscriptions</returns>
-        public virtual IPagedList<BackInStockSubscription> GetAllSubscriptionsByProductId(int productId,
-            int storeId = 0, int pageIndex = 0, int pageSize = int.MaxValue)
+        for (var i = 0; i <= subscriptions.Count - 1; i++)
+            await DeleteSubscriptionAsync(subscriptions[i]);
+
+        return result;
+    }
+
+    /// <summary>
+    /// Gets all subscriptions
+    /// </summary>
+    /// <param name="productId">Product identifier</param>
+    /// <param name="storeId">Store identifier; pass 0 to load all records</param>
+    /// <param name="pageIndex">Page index</param>
+    /// <param name="pageSize">Page size</param>
+    /// <returns>
+    /// A task that represents the asynchronous operation
+    /// The task result contains the subscriptions
+    /// </returns>
+    public virtual async Task<IPagedList<BackInStockSubscription>> GetAllSubscriptionsByProductIdAsync(int productId,
+        int storeId = 0, int pageIndex = 0, int pageSize = int.MaxValue)
+    {
+        return await _backInStockSubscriptionRepository.GetAllPagedAsync(query =>
         {
-            var query = _backInStockSubscriptionRepository.Table;
             //product
             query = query.Where(biss => biss.ProductId == productId);
             //store
@@ -118,98 +183,10 @@ namespace Nop.Services.Catalog
                 select biss;
 
             query = query.OrderByDescending(biss => biss.CreatedOnUtc);
-            return new PagedList<BackInStockSubscription>(query, pageIndex, pageSize);
-        }
 
-        /// <summary>
-        /// Gets all subscriptions
-        /// </summary>
-        /// <param name="customerId">Customer id</param>
-        /// <param name="productId">Product identifier</param>
-        /// <param name="storeId">Store identifier</param>
-        /// <returns>Subscriptions</returns>
-        public virtual BackInStockSubscription FindSubscription(int customerId, int productId, int storeId)
-        {
-            var query = from biss in _backInStockSubscriptionRepository.Table
-                        orderby biss.CreatedOnUtc descending
-                        where biss.CustomerId == customerId &&
-                              biss.ProductId == productId &&
-                              biss.StoreId == storeId
-                        select biss;
-
-            var subscription = query.FirstOrDefault();
-            return subscription;
-        }
-
-        /// <summary>
-        /// Gets a subscription
-        /// </summary>
-        /// <param name="subscriptionId">Subscription identifier</param>
-        /// <returns>Subscription</returns>
-        public virtual BackInStockSubscription GetSubscriptionById(int subscriptionId)
-        {
-            if (subscriptionId == 0)
-                return null;
-
-            var subscription = _backInStockSubscriptionRepository.ToCachedGetById(subscriptionId);
-            return subscription;
-        }
-
-        /// <summary>
-        /// Inserts subscription
-        /// </summary>
-        /// <param name="subscription">Subscription</param>
-        public virtual void InsertSubscription(BackInStockSubscription subscription)
-        {
-            if (subscription == null)
-                throw new ArgumentNullException(nameof(subscription));
-
-            _backInStockSubscriptionRepository.Insert(subscription);
-
-            //event notification
-            _eventPublisher.EntityInserted(subscription);
-        }
-
-        /// <summary>
-        /// Updates subscription
-        /// </summary>
-        /// <param name="subscription">Subscription</param>
-        public virtual void UpdateSubscription(BackInStockSubscription subscription)
-        {
-            if (subscription == null)
-                throw new ArgumentNullException(nameof(subscription));
-
-            _backInStockSubscriptionRepository.Update(subscription);
-
-            //event notification
-            _eventPublisher.EntityUpdated(subscription);
-        }
-
-        /// <summary>
-        /// Send notification to subscribers
-        /// </summary>
-        /// <param name="product">Product</param>
-        /// <returns>Number of sent email</returns>
-        public virtual int SendNotificationsToSubscribers(Product product)
-        {
-            if (product == null)
-                throw new ArgumentNullException(nameof(product));
-
-            var result = 0;
-            var subscriptions = GetAllSubscriptionsByProductId(product.Id);
-            foreach (var subscription in subscriptions)
-            {
-                var customerLanguageId = _genericAttributeService.GetAttribute<Customer, int>(subscription.CustomerId, NopCustomerDefaults.LanguageIdAttribute, subscription.StoreId);
-
-                result += _workflowMessageService.SendBackInStockNotification(subscription, customerLanguageId).Count;
-            }
-
-            for (var i = 0; i <= subscriptions.Count - 1; i++)
-                DeleteSubscription(subscriptions[i]);
-
-            return result;
-        }
-
-        #endregion
+            return query;
+        }, pageIndex, pageSize);
     }
+
+    #endregion
 }

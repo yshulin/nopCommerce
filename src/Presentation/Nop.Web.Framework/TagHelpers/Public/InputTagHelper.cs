@@ -1,47 +1,76 @@
-﻿using Microsoft.AspNetCore.Mvc.ViewFeatures;
+﻿﻿using Microsoft.AspNetCore.Mvc.ViewFeatures;
 using Microsoft.AspNetCore.Razor.TagHelpers;
 
-namespace Nop.Web.Framework.TagHelpers.Public
-{
-    /// <summary>
-    /// input tag helper
-    /// </summary>
-    [HtmlTargetElement("input", Attributes = ForAttributeName)]
-    public class InputTagHelper : Microsoft.AspNetCore.Mvc.TagHelpers.InputTagHelper
-    {
-        private const string ForAttributeName = "asp-for";
-        private const string DisabledAttributeName = "asp-disabled";
+ namespace Nop.Web.Framework.TagHelpers.Public; 
 
-        /// <summary>
-        /// Indicates whether the input is disabled
-        /// </summary>
-        [HtmlAttributeName(DisabledAttributeName)]
-        public string IsDisabled { set; get; }
+ /// <summary>
+ /// "input" tag helper
+ /// </summary>
+ [HtmlTargetElement("input", Attributes = FOR_ATTRIBUTE_NAME)]
+ public partial class InputTagHelper : Microsoft.AspNetCore.Mvc.TagHelpers.InputTagHelper
+ {
+     #region Constants
 
-        /// <summary>
-        /// Ctor
-        /// </summary>
-        /// <param name="generator">IHTML generator</param>
-        public InputTagHelper(IHtmlGenerator generator) : base(generator)
-        {
-        }
+     protected const string FOR_ATTRIBUTE_NAME = "asp-for";
+     protected const string DISABLED_ATTRIBUTE_NAME = "asp-disabled";
 
-        /// <summary>
-        /// Process
-        /// </summary>
-        /// <param name="context">Context</param>
-        /// <param name="output">Output</param>
-        public override void Process(TagHelperContext context, TagHelperOutput output)
-        {
-            //add disabled attribute
-            bool.TryParse(IsDisabled, out bool disabled);
-            if (disabled)
-            {
-                var d = new TagHelperAttribute("disabled", "disabled");
-                output.Attributes.Add(d);
-            }
+     #endregion
 
-            base.Process(context, output);
-        }
-    }
-}
+     #region Ctor
+
+     public InputTagHelper(IHtmlGenerator generator) : base(generator)
+     {
+     }
+
+     #endregion
+
+     #region Methods
+
+     /// <summary>
+     /// Asynchronously executes the tag helper with the given context and output
+     /// </summary>
+     /// <param name="context">Contains information associated with the current HTML tag</param>
+     /// <param name="output">A stateful HTML element used to generate an HTML tag</param>
+     /// <returns>A task that represents the asynchronous operation</returns>
+     public override async Task ProcessAsync(TagHelperContext context, TagHelperOutput output)
+     {
+         ArgumentNullException.ThrowIfNull(context);
+
+         ArgumentNullException.ThrowIfNull(output);
+
+         //add disabled attribute
+         if (bool.TryParse(IsDisabled, out var disabled) && disabled)
+             output.Attributes.Add(new TagHelperAttribute("disabled", "disabled"));
+
+         try
+         {
+             await base.ProcessAsync(context, output);
+         }
+         catch
+         {
+             //If the passed values differ in data type according to the model, we should try to initialize the component with a default value. 
+             //If this is not possible, then we suppress the generation of html for this imput.
+             try
+             {
+                 ViewContext.ModelState[For.Name].RawValue = Activator.CreateInstance(For.ModelExplorer.ModelType);
+                 await base.ProcessAsync(context, output);
+             }
+             catch
+             {
+                 output.SuppressOutput();
+             }
+         }
+     }
+
+     #endregion
+
+     #region Properties
+
+     /// <summary>
+     /// Indicates whether the input is disabled
+     /// </summary>
+     [HtmlAttributeName(DISABLED_ATTRIBUTE_NAME)]
+     public string IsDisabled { set; get; }
+
+     #endregion
+ }

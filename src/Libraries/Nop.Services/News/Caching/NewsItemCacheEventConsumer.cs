@@ -1,22 +1,24 @@
 ﻿using Nop.Core.Domain.News;
 using Nop.Services.Caching;
 
-namespace Nop.Services.News.Caching
+namespace Nop.Services.News.Caching;
+
+/// <summary>
+/// Represents a news item cache event consumer
+/// </summary>
+public partial class NewsItemCacheEventConsumer : CacheEventConsumer<NewsItem>
 {
     /// <summary>
-    /// Represents a news item cache event consumer
+    /// Clear cache data
     /// </summary>
-    public partial class NewsItemCacheEventConsumer : CacheEventConsumer<NewsItem>
+    /// <param name="entity">Entity</param>
+    /// <param name="entityEventType">Entity event type</param>
+    /// <returns>A task that represents the asynchronous operation</returns>
+    protected override async Task ClearCacheAsync(NewsItem entity, EntityEventType entityEventType)
     {
-        /// <summary>
-        /// Clear cache data
-        /// </summary>
-        /// <param name="entity">Entity</param>
-        protected override void ClearCache(NewsItem entity)
-        {
-            var prefix = _cacheKeyService.PrepareKeyPrefix(NopNewsDefaults.NewsCommentsNumberPrefixCacheKey, entity);
+        if (entityEventType == EntityEventType.Delete)
+            await RemoveByPrefixAsync(NopNewsDefaults.NewsCommentsNumberPrefix, entity);
 
-            RemoveByPrefix(prefix);
-        }
+        await base.ClearCacheAsync(entity, entityEventType);
     }
 }

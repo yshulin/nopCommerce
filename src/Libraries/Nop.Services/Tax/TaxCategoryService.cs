@@ -1,115 +1,91 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using Nop.Core.Domain.Tax;
+﻿using Nop.Core.Domain.Tax;
 using Nop.Data;
-using Nop.Services.Caching;
-using Nop.Services.Caching.Extensions;
-using Nop.Services.Events;
 
-namespace Nop.Services.Tax
+namespace Nop.Services.Tax;
+
+/// <summary>
+/// Tax category service
+/// </summary>
+public partial class TaxCategoryService : ITaxCategoryService
 {
-    /// <summary>
-    /// Tax category service
-    /// </summary>
-    public partial class TaxCategoryService : ITaxCategoryService
+    #region Fields
+
+    protected readonly IRepository<TaxCategory> _taxCategoryRepository;
+
+    #endregion
+
+    #region Ctor
+
+    public TaxCategoryService(IRepository<TaxCategory> taxCategoryRepository)
     {
-        #region Fields
+        _taxCategoryRepository = taxCategoryRepository;
+    }
 
-        private readonly ICacheKeyService _cacheKeyService;
-        private readonly IEventPublisher _eventPublisher;
-        private readonly IRepository<TaxCategory> _taxCategoryRepository;
+    #endregion
 
-        #endregion
+    #region Methods
 
-        #region Ctor
+    /// <summary>
+    /// Deletes a tax category
+    /// </summary>
+    /// <param name="taxCategory">Tax category</param>
+    /// <returns>A task that represents the asynchronous operation</returns>
+    public virtual async Task DeleteTaxCategoryAsync(TaxCategory taxCategory)
+    {
+        await _taxCategoryRepository.DeleteAsync(taxCategory);
+    }
 
-        public TaxCategoryService(ICacheKeyService cacheKeyService,
-            IEventPublisher eventPublisher,
-            IRepository<TaxCategory> taxCategoryRepository)
+    /// <summary>
+    /// Gets all tax categories
+    /// </summary>
+    /// <returns>
+    /// A task that represents the asynchronous operation
+    /// The task result contains the ax categories
+    /// </returns>
+    public virtual async Task<IList<TaxCategory>> GetAllTaxCategoriesAsync()
+    {
+        var taxCategories = await _taxCategoryRepository.GetAllAsync(query =>
         {
-            _cacheKeyService = cacheKeyService;
-            _eventPublisher = eventPublisher;
-            _taxCategoryRepository = taxCategoryRepository;
-        }
-
-        #endregion
-
-        #region Methods
-
-        /// <summary>
-        /// Deletes a tax category
-        /// </summary>
-        /// <param name="taxCategory">Tax category</param>
-        public virtual void DeleteTaxCategory(TaxCategory taxCategory)
-        {
-            if (taxCategory == null)
-                throw new ArgumentNullException(nameof(taxCategory));
-
-            _taxCategoryRepository.Delete(taxCategory);
-
-            //event notification
-            _eventPublisher.EntityDeleted(taxCategory);
-        }
-
-        /// <summary>
-        /// Gets all tax categories
-        /// </summary>
-        /// <returns>Tax categories</returns>
-        public virtual IList<TaxCategory> GetAllTaxCategories()
-        {
-            var query = from tc in _taxCategoryRepository.Table
+            return from tc in query
                 orderby tc.DisplayOrder, tc.Id
                 select tc;
+        }, cache => default);
 
-            var taxCategories = query.ToCachedList(_cacheKeyService.PrepareKeyForDefaultCache(NopTaxDefaults.TaxCategoriesAllCacheKey));
-
-            return taxCategories;
-        }
-
-        /// <summary>
-        /// Gets a tax category
-        /// </summary>
-        /// <param name="taxCategoryId">Tax category identifier</param>
-        /// <returns>Tax category</returns>
-        public virtual TaxCategory GetTaxCategoryById(int taxCategoryId)
-        {
-            if (taxCategoryId == 0)
-                return null;
-
-            return _taxCategoryRepository.ToCachedGetById(taxCategoryId);
-        }
-
-        /// <summary>
-        /// Inserts a tax category
-        /// </summary>
-        /// <param name="taxCategory">Tax category</param>
-        public virtual void InsertTaxCategory(TaxCategory taxCategory)
-        {
-            if (taxCategory == null)
-                throw new ArgumentNullException(nameof(taxCategory));
-
-            _taxCategoryRepository.Insert(taxCategory);
-
-            //event notification
-            _eventPublisher.EntityInserted(taxCategory);
-        }
-
-        /// <summary>
-        /// Updates the tax category
-        /// </summary>
-        /// <param name="taxCategory">Tax category</param>
-        public virtual void UpdateTaxCategory(TaxCategory taxCategory)
-        {
-            if (taxCategory == null)
-                throw new ArgumentNullException(nameof(taxCategory));
-
-            _taxCategoryRepository.Update(taxCategory);
-
-            //event notification
-            _eventPublisher.EntityUpdated(taxCategory);
-        }
-
-        #endregion
+        return taxCategories;
     }
+
+    /// <summary>
+    /// Gets a tax category
+    /// </summary>
+    /// <param name="taxCategoryId">Tax category identifier</param>
+    /// <returns>
+    /// A task that represents the asynchronous operation
+    /// The task result contains the ax category
+    /// </returns>
+    public virtual async Task<TaxCategory> GetTaxCategoryByIdAsync(int taxCategoryId)
+    {
+        return await _taxCategoryRepository.GetByIdAsync(taxCategoryId, cache => default);
+    }
+
+    /// <summary>
+    /// Inserts a tax category
+    /// </summary>
+    /// <param name="taxCategory">Tax category</param>
+    /// <returns>A task that represents the asynchronous operation</returns>
+    public virtual async Task InsertTaxCategoryAsync(TaxCategory taxCategory)
+    {
+        await _taxCategoryRepository.InsertAsync(taxCategory);
+    }
+
+    /// <summary>
+    /// Updates the tax category
+    /// </summary>
+    /// <param name="taxCategory">Tax category</param>
+    /// <returns>A task that represents the asynchronous operation</returns>
+    public virtual async Task UpdateTaxCategoryAsync(TaxCategory taxCategory)
+    {
+        await _taxCategoryRepository.UpdateAsync(taxCategory);
+    }
+
+    #endregion
 }

@@ -1,36 +1,27 @@
 ﻿using Nop.Web.Framework.Models;
 
-namespace Nop.Web.Models.Catalog
+namespace Nop.Web.Models.Catalog;
+
+/// <summary>
+/// Represents a product specification model
+/// </summary>
+public partial record ProductSpecificationModel : BaseNopModel
 {
+    #region Properties
+
     /// <summary>
-    /// Specification attribute model
+    /// Gets or sets the grouped specification attribute models
     /// </summary>
-    public partial class ProductSpecificationModel : BaseNopModel
+    public IList<ProductSpecificationAttributeGroupModel> Groups { get; set; }
+
+    #endregion
+
+    #region Ctor
+
+    public ProductSpecificationModel()
     {
-        /// <summary>
-        /// Specificartion attribute ID
-        /// </summary>
-        public int SpecificationAttributeId { get; set; }
-
-        /// <summary>
-        /// Specificartion attribute name
-        /// </summary>
-        public string SpecificationAttributeName { get; set; }
-
-        /// <summary>
-        /// Option value
-        /// this value is already HTML encoded
-        /// </summary>
-        public string ValueRaw { get; set; }
-
-        /// <summary>
-        /// Option color (if specified). Used to display color squares
-        /// </summary>
-        public string ColorSquaresRgb { get; set; }
-
-        /// <summary>
-        /// Attribyte type ID
-        /// </summary>
-        public int AttributeTypeId { get; set; }
+        Groups = new List<ProductSpecificationAttributeGroupModel>();
     }
+
+    #endregion
 }

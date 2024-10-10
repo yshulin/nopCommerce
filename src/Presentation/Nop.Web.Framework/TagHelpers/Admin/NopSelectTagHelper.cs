@@ -1,141 +1,149 @@
-﻿using System;
-using System.Collections.Generic;
-using Microsoft.AspNetCore.Html;
+﻿using Microsoft.AspNetCore.Html;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.AspNetCore.Mvc.ViewFeatures;
 using Microsoft.AspNetCore.Razor.TagHelpers;
 using Nop.Web.Framework.Extensions;
 
-namespace Nop.Web.Framework.TagHelpers.Admin
+namespace Nop.Web.Framework.TagHelpers.Admin;
+
+/// <summary>
+/// "nop-select" tag helper
+/// </summary>
+[HtmlTargetElement("nop-select", TagStructure = TagStructure.WithoutEndTag)]
+public partial class NopSelectTagHelper : TagHelper
 {
-    /// <summary>
-    /// nop-select tag helper
-    /// </summary>
-    [HtmlTargetElement("nop-select", TagStructure = TagStructure.WithoutEndTag)]
-    public class NopSelectTagHelper : TagHelper
+    #region Constants
+
+    protected const string FOR_ATTRIBUTE_NAME = "asp-for";
+    protected const string NAME_ATTRIBUTE_NAME = "asp-for-name";
+    protected const string ITEMS_ATTRIBUTE_NAME = "asp-items";
+    protected const string MULTIPLE_ATTRIBUTE_NAME = "asp-multiple";
+    protected const string REQUIRED_ATTRIBUTE_NAME = "asp-required";
+
+    #endregion
+
+    #region Fields
+
+    protected readonly IHtmlHelper _htmlHelper;
+
+    #endregion
+
+    #region Ctor
+
+    public NopSelectTagHelper(IHtmlHelper htmlHelper)
     {
-        private const string ForAttributeName = "asp-for";
-        private const string NameAttributeName = "asp-for-name";
-        private const string ItemsAttributeName = "asp-items";
-        private const string DisabledAttributeName = "asp-multiple";
-        private const string RequiredAttributeName = "asp-required";
+        _htmlHelper = htmlHelper;
+    }
 
-        private readonly IHtmlHelper _htmlHelper;
+    #endregion
 
-        /// <summary>
-        /// An expression to be evaluated against the current model
-        /// </summary>
-        [HtmlAttributeName(ForAttributeName)]
-        public ModelExpression For { get; set; }
+    #region Methods
 
-        /// <summary>
-        /// Name for a dropdown list
-        /// </summary>
-        [HtmlAttributeName(NameAttributeName)]
-        public string Name { get; set; }
+    /// <summary>
+    /// Asynchronously executes the tag helper with the given context and output
+    /// </summary>
+    /// <param name="context">Contains information associated with the current HTML tag</param>
+    /// <param name="output">A stateful HTML element used to generate an HTML tag</param>
+    /// <returns>A task that represents the asynchronous operation</returns>
+    public override async Task ProcessAsync(TagHelperContext context, TagHelperOutput output)
+    {
+        ArgumentNullException.ThrowIfNull(context);
 
-        /// <summary>
-        /// Items for a dropdown list
-        /// </summary>
-        [HtmlAttributeName(ItemsAttributeName)]
-        public IEnumerable<SelectListItem> Items { set; get; } = new List<SelectListItem>();
+        ArgumentNullException.ThrowIfNull(output);
 
-        /// <summary>
-        /// Indicates whether the field is required
-        /// </summary>
-        [HtmlAttributeName(RequiredAttributeName)]
-        public string IsRequired { set; get; }
+        //clear the output
+        output.SuppressOutput();
 
-        /// <summary>
-        /// Indicates whether the input is multiple
-        /// </summary>
-        [HtmlAttributeName(DisabledAttributeName)]
-        public string IsMultiple { set; get; }
-
-        /// <summary>
-        /// ViewContext
-        /// </summary>
-        [HtmlAttributeNotBound]
-        [ViewContext]
-        public ViewContext ViewContext { get; set; }
-
-        /// <summary>
-        /// Ctor
-        /// </summary>
-        /// <param name="htmlHelper">HTML helper</param>
-        public NopSelectTagHelper(IHtmlHelper htmlHelper)
+        //required asterisk
+        if (bool.TryParse(IsRequired, out var required) && required)
         {
-            _htmlHelper = htmlHelper;
+            output.PreElement.SetHtmlContent("<div class='input-group input-group-required'>");
+            output.PostElement.SetHtmlContent("<div class=\"input-group-btn\"><span class=\"required\">*</span></div></div>");
         }
 
-        /// <summary>
-        /// Process
-        /// </summary>
-        /// <param name="context">Context</param>
-        /// <param name="output">Output</param>
-        public override void Process(TagHelperContext context, TagHelperOutput output)
+        //contextualize IHtmlHelper
+        var viewContextAware = _htmlHelper as IViewContextAware;
+        viewContextAware?.Contextualize(ViewContext);
+
+        //get htmlAttributes object
+        var htmlAttributes = new Dictionary<string, object>();
+        var attributes = context.AllAttributes;
+        foreach (var attribute in attributes)
         {
-            if (context == null)
+            if (!attribute.Name.Equals(FOR_ATTRIBUTE_NAME) &&
+                !attribute.Name.Equals(NAME_ATTRIBUTE_NAME) &&
+                !attribute.Name.Equals(ITEMS_ATTRIBUTE_NAME) &&
+                !attribute.Name.Equals(MULTIPLE_ATTRIBUTE_NAME) &&
+                !attribute.Name.Equals(REQUIRED_ATTRIBUTE_NAME))
             {
-                throw new ArgumentNullException(nameof(context));
+                htmlAttributes.Add(attribute.Name, attribute.Value);
             }
+        }
 
-            if (output == null)
+        //generate editor
+        var tagName = For != null ? For.Name : Name;
+        _ = bool.TryParse(IsMultiple, out var multiple);
+        if (!string.IsNullOrEmpty(tagName))
+        {
+            IHtmlContent selectList;
+            if (multiple)
             {
-                throw new ArgumentNullException(nameof(output));
+                var templateName = For.ModelExplorer.ModelType == typeof(List<string>) ? "MultiSelectString" : "MultiSelect";
+                selectList = _htmlHelper.Editor(tagName, templateName, new { htmlAttributes, SelectList = Items });
             }
-
-            //clear the output
-            output.SuppressOutput();
-
-            //required asterisk
-            bool.TryParse(IsRequired, out bool required);
-            if (required)
+            else
             {
-                output.PreElement.SetHtmlContent("<div class='input-group input-group-required'>");
-                output.PostElement.SetHtmlContent("<div class=\"input-group-btn\"><span class=\"required\">*</span></div></div>");
-            }
-
-            //contextualize IHtmlHelper
-            var viewContextAware = _htmlHelper as IViewContextAware;
-            viewContextAware?.Contextualize(ViewContext);
-
-            //get htmlAttributes object
-            var htmlAttributes = new Dictionary<string, object>();
-            var attributes = context.AllAttributes;
-            foreach (var attribute in attributes)
-            {
-                if (!attribute.Name.Equals(ForAttributeName) &&
-                    !attribute.Name.Equals(NameAttributeName) &&
-                    !attribute.Name.Equals(ItemsAttributeName) &&
-                    !attribute.Name.Equals(DisabledAttributeName) &&
-                    !attribute.Name.Equals(RequiredAttributeName))
-                {
-                    htmlAttributes.Add(attribute.Name, attribute.Value);
-                }
-            }
-
-            //generate editor
-            var tagName = For != null ? For.Name : Name;
-            bool.TryParse(IsMultiple, out bool multiple);
-            if (!string.IsNullOrEmpty(tagName))
-            {
-                IHtmlContent selectList;
-                if (multiple)
-                {
-                    selectList = _htmlHelper.Editor(tagName, "MultiSelect", new {htmlAttributes, SelectList = Items});
-                }
+                if (htmlAttributes.ContainsKey("class"))
+                    htmlAttributes["class"] += " form-control";
                 else
-                {
-                    if (htmlAttributes.ContainsKey("class"))
-                        htmlAttributes["class"] += " form-control";
-                    else
-                        htmlAttributes.Add("class", "form-control");
+                    htmlAttributes.Add("class", "form-control");
 
-                    selectList = _htmlHelper.DropDownList(tagName, Items, htmlAttributes);
-                }
-                output.Content.SetHtmlContent(selectList.RenderHtmlContent());
+                selectList = _htmlHelper.DropDownList(tagName, Items, htmlAttributes);
             }
+            output.Content.SetHtmlContent(await selectList.RenderHtmlContentAsync());
         }
     }
+
+    #endregion
+
+    #region Properties
+
+    /// <summary>
+    /// An expression to be evaluated against the current model
+    /// </summary>
+    [HtmlAttributeName(FOR_ATTRIBUTE_NAME)]
+    public ModelExpression For { get; set; }
+
+    /// <summary>
+    /// Name for a dropdown list
+    /// </summary>
+    [HtmlAttributeName(NAME_ATTRIBUTE_NAME)]
+    public string Name { get; set; }
+
+    /// <summary>
+    /// Items for a dropdown list
+    /// </summary>
+    [HtmlAttributeName(ITEMS_ATTRIBUTE_NAME)]
+    public IEnumerable<SelectListItem> Items { set; get; } = new List<SelectListItem>();
+
+    /// <summary>
+    /// Indicates whether the field is required
+    /// </summary>
+    [HtmlAttributeName(REQUIRED_ATTRIBUTE_NAME)]
+    public string IsRequired { set; get; }
+
+    /// <summary>
+    /// Indicates whether the input is multiple
+    /// </summary>
+    [HtmlAttributeName(MULTIPLE_ATTRIBUTE_NAME)]
+    public string IsMultiple { set; get; }
+
+    /// <summary>
+    /// ViewContext
+    /// </summary>
+    [HtmlAttributeNotBound]
+    [ViewContext]
+    public ViewContext ViewContext { get; set; }
+
+    #endregion
 }

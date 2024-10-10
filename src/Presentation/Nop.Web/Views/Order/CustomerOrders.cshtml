@@ -3,20 +3,21 @@
     Layout = "_ColumnsTwo";
 
     //title
-    Html.AddTitleParts(T("PageTitle.Account").Text);
+    NopHtml.AddTitleParts(T("PageTitle.Account").Text);
     //page class
-    Html.AppendPageCssClassParts("html-account-page");
-    Html.AppendPageCssClassParts("html-order-list-page");
+    NopHtml.AppendPageCssClassParts("html-account-page");
+    NopHtml.AppendPageCssClassParts("html-order-list-page");
 }
 @section left
 {
-    @await Component.InvokeAsync("CustomerNavigation", new { selectedTabId = CustomerNavigationEnum.Orders })
+    @await Component.InvokeAsync(typeof(CustomerNavigationViewComponent), new { selectedTabId = CustomerNavigationEnum.Orders })
 }
 <div class="page account-page order-list-page">
     <div class="page-title">
         <h1>@T("Account.MyAccount") - @T("Account.CustomerOrders")</h1>
     </div>
     <div class="page-body">
+        @await Component.InvokeAsync(typeof(WidgetViewComponent), new { widgetZone = PublicWidgetZones.CustomerOrdersTop, additionalData = Model })
         @if (Model.RecurringOrders.Count > 0)
         {
             <div class="section recurring-payments">
@@ -99,14 +100,14 @@
                                             <td class="retry">
                                                 @if (item.CanRetryLastPayment)
                                                 {
-                                                    <input type="submit" name="retryLastPayment_@(item.Id)" value="@T("Account.CustomerOrders.RecurringOrders.RetryLastPayment")" class="button-2 retry-recurring-order-button" />
+                                                    <button type="submit" name="retryLastPayment_@(item.Id)" class="button-2 retry-recurring-order-button">@T("Account.CustomerOrders.RecurringOrders.RetryLastPayment")</button>
                                                 }
                                             </td>
                                         }
                                         <td class="cancel">
                                             @if (item.CanCancel)
                                             {
-                                                <input type="submit" name="cancelRecurringPayment@(item.Id)" value="@T("Account.CustomerOrders.RecurringOrders.Cancel")" class="button-2 cancel-recurring-order-button" />
+                                                <button type="submit" name="cancelRecurringPayment@(item.Id)" class="button-2 cancel-recurring-order-button">@T("Account.CustomerOrders.RecurringOrders.Cancel")</button>
                                             }
                                         </td>
                                     </tr>
@@ -146,9 +147,9 @@
                         <div class="buttons">
                             @if (order.IsReturnRequestAllowed)
                             {
-                                <input type="button" value="@T("Account.CustomerOrders.ReturnItems")" class="button-2 return-items-button" onclick="setLocation('@Url.RouteUrl("ReturnRequest", new { orderId = order.Id })')" />
+                                <button type="button" class="button-2 return-items-button" onclick="setLocation('@Url.RouteUrl("ReturnRequest", new { orderId = order.Id })')">@T("Account.CustomerOrders.ReturnItems")</button>
                             }
-                            <input type="button" value="@T("Account.CustomerOrders.OrderDetails")" class="button-2 order-details-button" onclick="setLocation('@Url.RouteUrl("OrderDetails", new { orderId = order.Id })')" />
+                            <button type="button" class="button-2 order-details-button" onclick="setLocation('@Url.RouteUrl("OrderDetails", new { orderId = order.Id })')">@T("Account.CustomerOrders.OrderDetails")</button>
                         </div>
                     </div>
                 }
@@ -160,5 +161,6 @@
                 @T("Account.CustomerOrders.NoOrders")
             </div>
         }
+        @await Component.InvokeAsync(typeof(WidgetViewComponent), new { widgetZone = PublicWidgetZones.CustomerOrdersBottom, additionalData = Model })
     </div>
 </div>

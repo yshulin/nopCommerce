@@ -1,30 +1,40 @@
 ﻿@model VendorModel
+
+@using Nop.Core
 @using Nop.Core.Domain.Seo
-@inject Nop.Core.IWebHelper webHelper
+@using Nop.Core.Domain.Vendors
+
+@inject IWebHelper webHelper
 @inject SeoSettings seoSettings
+
 @{
     Layout = "_ColumnsTwo";
 
     //title
-    Html.AddTitleParts(!string.IsNullOrEmpty(Model.MetaTitle) ? Model.MetaTitle : Model.Name);
+    NopHtml.AddTitleParts(!string.IsNullOrEmpty(Model.MetaTitle) ? Model.MetaTitle : Model.Name);
     //meta
-    Html.AddMetaDescriptionParts(Model.MetaDescription);
-    Html.AddMetaKeywordParts(Model.MetaKeywords);
+    NopHtml.AddMetaDescriptionParts(Model.MetaDescription);
+    NopHtml.AddMetaKeywordParts(Model.MetaKeywords);
     //page class
-    Html.AppendPageCssClassParts("html-vendor-page");
+    NopHtml.AppendPageCssClassParts("html-vendor-page");
 
     if (seoSettings.CanonicalUrlsEnabled)
     {
-        var vendorUrl = Url.RouteUrl("Vendor", new { SeName = Model.SeName }, webHelper.CurrentRequestProtocol).ToLowerInvariant();
-        Html.AddCanonicalUrlParts(vendorUrl, seoSettings.QueryStringInCanonicalUrlsEnabled);
+        var vendorUrl = Url.RouteUrl<Vendor>(new { SeName = Model.SeName }, webHelper.GetCurrentRequestProtocol()).ToLowerInvariant();
+        NopHtml.AddCanonicalUrlParts(vendorUrl, seoSettings.QueryStringInCanonicalUrlsEnabled);
     }
 }
+
+@section CatalogFilters {
+    @await Html.PartialAsync("_CatalogFilters", Model.CatalogProductsModel)
+}
+
 <div class="page vendor-page">
     <div class="page-title">
         <h1>@Model.Name</h1>
     </div>
     <div class="page-body">
-        @await Component.InvokeAsync("Widget", new { widgetZone = PublicWidgetZones.VendorDetailsTop, additionalData = Model })
+        @await Component.InvokeAsync(typeof(WidgetViewComponent), new { widgetZone = PublicWidgetZones.VendorDetailsTop, additionalData = Model })
         @*description*@
         @if (!string.IsNullOrWhiteSpace(Model.Description))
         {
@@ -36,36 +46,17 @@
         @if (Model.AllowCustomersToContactVendors)
         {
             <div class="contact-vendor">
-                <input type="button" value="@T("ContactVendor")" class="button-2 contact-vendor-button" onclick="setLocation('@Url.RouteUrl("ContactVendor", new { vendorId = Model.Id })')" />
+                <button type="button" class="button-2 contact-vendor-button" onclick="setLocation('@Url.RouteUrl("ContactVendor", new { vendorId = Model.Id })')">@T("ContactVendor")</button>
             </div>
         }
-        @if (Model.Products.Count > 0)
-        {
-            @await Html.PartialAsync("_CatalogSelectors", Model.PagingFilteringContext)
-        }
-        @*product list*@
-        @if (Model.Products.Count > 0)
-        {
-            <div class="@(Model.PagingFilteringContext.ViewMode == "list" ? "product-list" : "product-grid")">
-                <div class="item-grid">
-                    @foreach (var product in Model.Products)
-                    {
-                        <div class="item-box">
-                            @await Html.PartialAsync("_ProductBox", product)
-                        </div>
-                    }
-                </div>
-            </div>
-        }
+        @await Html.PartialAsync("_CatalogSelectors", Model.CatalogProductsModel)
         @{
-            var pager = Html.Pager(Model.PagingFilteringContext).QueryParam("pagenumber");
+            var catalogProductsViewData = new ViewDataDictionary(ViewData)
+            {
+                ["fetchUrl"] = Html.Raw(Url.RouteUrl("GetVendorProducts", new { vendorId = Model.Id }))
+            };
         }
-        @if (!pager.IsEmpty())
-        {
-            <div class="pager">
-                @pager
-            </div>
-        }
-        @await Component.InvokeAsync("Widget", new { widgetZone = PublicWidgetZones.VendorDetailsBottom, additionalData = Model })
+        @await Html.PartialAsync("_CatalogProducts", Model.CatalogProductsModel, catalogProductsViewData)
+        @await Component.InvokeAsync(typeof(WidgetViewComponent), new { widgetZone = PublicWidgetZones.VendorDetailsBottom, additionalData = Model })
     </div>
 </div>

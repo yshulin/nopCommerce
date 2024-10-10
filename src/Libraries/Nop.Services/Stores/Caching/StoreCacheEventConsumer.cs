@@ -1,27 +1,24 @@
-﻿using Nop.Core.Domain.Stores;
+﻿using Nop.Core.Caching;
+using Nop.Core.Domain.Orders;
+using Nop.Core.Domain.Stores;
 using Nop.Services.Caching;
 using Nop.Services.Localization;
-using Nop.Services.Orders;
 
-namespace Nop.Services.Stores.Caching
+namespace Nop.Services.Stores.Caching;
+
+/// <summary>
+/// Represents a store cache event consumer
+/// </summary>
+public partial class StoreCacheEventConsumer : CacheEventConsumer<Store>
 {
     /// <summary>
-    /// Represents a store cache event consumer
+    /// Clear cache data
     /// </summary>
-    public partial class StoreCacheEventConsumer : CacheEventConsumer<Store>
+    /// <param name="entity">Entity</param>
+    /// <returns>A task that represents the asynchronous operation</returns>
+    protected override async Task ClearCacheAsync(Store entity)
     {
-        /// <summary>
-        /// Clear cache data
-        /// </summary>
-        /// <param name="entity">Entity</param>
-        protected override void ClearCache(Store entity)
-        {
-            Remove(NopStoreDefaults.StoresAllCacheKey);
-            RemoveByPrefix(NopOrderDefaults.ShoppingCartPrefixCacheKey);
-
-            var prefix = _cacheKeyService.PrepareKeyPrefix(NopLocalizationDefaults.LanguagesByStoreIdPrefixCacheKey, entity);
-
-            RemoveByPrefix(prefix);
-        }
+        await RemoveByPrefixAsync(NopEntityCacheDefaults<ShoppingCartItem>.AllPrefix);
+        await RemoveByPrefixAsync(NopLocalizationDefaults.LanguagesByStorePrefix, entity);
     }
 }

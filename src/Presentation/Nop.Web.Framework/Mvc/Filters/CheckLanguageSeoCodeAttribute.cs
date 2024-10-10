@@ -1,110 +1,137 @@
-﻿using System;
-using System.Net;
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Nop.Core;
 using Nop.Core.Domain.Localization;
+using Nop.Core.Http.Extensions;
 using Nop.Data;
 using Nop.Services.Localization;
 
-namespace Nop.Web.Framework.Mvc.Filters
-{
-    /// <summary>
-    /// Represents filter attribute that checks SEO friendly URLs for multiple languages and properly redirect if necessary
-    /// </summary>
-    public sealed class CheckLanguageSeoCodeAttribute : TypeFilterAttribute
-    {
-        #region Ctor
+namespace Nop.Web.Framework.Mvc.Filters;
 
-        /// <summary>
-        /// Create instance of the filter attribute
-        /// </summary>
-        public CheckLanguageSeoCodeAttribute() : base(typeof(CheckLanguageSeoCodeFilter))
-        {
-        }
-        
+/// <summary>
+/// Represents filter attribute that checks SEO friendly URLs for multiple languages and properly redirect if necessary
+/// </summary>
+public sealed class CheckLanguageSeoCodeAttribute : TypeFilterAttribute
+{
+    #region Ctor
+
+    /// <summary>
+    /// Create instance of the filter attribute
+    /// </summary>
+    /// <param name="ignore">Whether to ignore the execution of filter actions</param>
+    public CheckLanguageSeoCodeAttribute(bool ignore = false) : base(typeof(CheckLanguageSeoCodeFilter))
+    {
+        IgnoreFilter = ignore;
+        Arguments = [ignore];
+    }
+
+    #endregion
+
+    #region Properties
+
+    /// <summary>
+    /// Gets a value indicating whether to ignore the execution of filter actions
+    /// </summary>
+    public bool IgnoreFilter { get; }
+
+    #endregion
+
+    #region Nested filter
+
+    /// <summary>
+    /// Represents a filter that checks SEO friendly URLs for multiple languages and properly redirect if necessary
+    /// </summary>
+    private class CheckLanguageSeoCodeFilter : IAsyncActionFilter
+    {
+        #region Fields
+
+        protected readonly bool _ignoreFilter;
+        protected readonly IWebHelper _webHelper;
+        protected readonly IWorkContext _workContext;
+        protected readonly LocalizationSettings _localizationSettings;
+
         #endregion
 
-        #region Nested filter
+        #region Ctor
+
+        public CheckLanguageSeoCodeFilter(bool ignoreFilter,
+            IWebHelper webHelper,
+            IWorkContext workContext,
+            LocalizationSettings localizationSettings)
+        {
+            _ignoreFilter = ignoreFilter;
+            _webHelper = webHelper;
+            _workContext = workContext;
+            _localizationSettings = localizationSettings;
+        }
+
+        #endregion
+
+        #region Utilities
 
         /// <summary>
-        /// Represents a filter that checks SEO friendly URLs for multiple languages and properly redirect if necessary
+        /// Called asynchronously before the action, after model binding is complete.
         /// </summary>
-        private class CheckLanguageSeoCodeFilter : IActionFilter
+        /// <param name="context">A context for action filters</param>
+        /// <returns>A task that represents the asynchronous operation</returns>
+        private async Task CheckLanguageSeoCodeAsync(ActionExecutingContext context)
         {
-            #region Fields
+            ArgumentNullException.ThrowIfNull(context);
 
-            private readonly IWebHelper _webHelper;
-            private readonly IWorkContext _workContext;
-            private readonly LocalizationSettings _localizationSettings;
+            //only in GET requests
+            if (!context.HttpContext.Request.IsGetRequest())
+                return;
 
-            #endregion
+            if (!DataSettingsManager.IsDatabaseInstalled())
+                return;
 
-            #region Ctor
+            //check whether this filter has been overridden for the Action
+            var actionFilter = context.ActionDescriptor.FilterDescriptors
+                .Where(filterDescriptor => filterDescriptor.Scope == FilterScope.Action)
+                .Select(filterDescriptor => filterDescriptor.Filter)
+                .OfType<CheckLanguageSeoCodeAttribute>()
+                .FirstOrDefault();
 
-            public CheckLanguageSeoCodeFilter(
-                IWebHelper webHelper,
-                IWorkContext workContext,
-                LocalizationSettings localizationSettings)
-            {
-                _webHelper = webHelper;
-                _workContext = workContext;
-                _localizationSettings = localizationSettings;
-            }
+            //ignore filter (an action doesn't need to be checked)
+            if (actionFilter?.IgnoreFilter ?? _ignoreFilter)
+                return;
 
-            #endregion
+            //whether SEO friendly URLs are enabled
+            if (!_localizationSettings.SeoFriendlyUrlsForLanguagesEnabled)
+                return;
 
-            #region Methods
+            //check whether current page URL is already localized URL
+            var pageUrl = _webHelper.GetRawUrl(context.HttpContext.Request);
+            var result = await pageUrl.IsLocalizedUrlAsync(context.HttpContext.Request.PathBase, true);
+            if (result.IsLocalized)
+                return;
 
-            /// <summary>
-            /// Called before the action executes, after model binding is complete
-            /// </summary>
-            /// <param name="context">A context for action filters</param>
-            public void OnActionExecuting(ActionExecutingContext context)
-            {
-                if (context == null)
-                    throw new ArgumentNullException(nameof(context));
+            //not localized yet, so redirect to the page with working language SEO code
+            var language = await _workContext.GetWorkingLanguageAsync();
+            pageUrl = pageUrl.AddLanguageSeoCodeToUrl(context.HttpContext.Request.PathBase, true, language);
 
-                if (context.HttpContext.Request == null)
-                    return;
+            context.Result = new LocalRedirectResult(pageUrl, false);
+        }
 
-                //only in GET requests
-                if (!context.HttpContext.Request.Method.Equals(WebRequestMethods.Http.Get, StringComparison.InvariantCultureIgnoreCase))
-                    return;
+        #endregion
 
-                if (!DataSettingsManager.DatabaseIsInstalled)
-                    return;
+        #region Methods
 
-                //whether SEO friendly URLs are enabled
-                if (!_localizationSettings.SeoFriendlyUrlsForLanguagesEnabled)
-                    return;
-
-                //ensure that this route is registered and localizable (LocalizedRoute in RouteProvider)
-                if (context.RouteData.Values["language"] == null)
-                    return;
-                
-                //check whether current page URL is already localized URL
-                var pageUrl = _webHelper.GetRawUrl(context.HttpContext.Request);
-                if (pageUrl.IsLocalizedUrl(context.HttpContext.Request.PathBase, true, out var _))
-                    return;
-
-                //not localized yet, so redirect to the page with working language SEO code
-                pageUrl = pageUrl.AddLanguageSeoCodeToUrl(context.HttpContext.Request.PathBase, true, _workContext.WorkingLanguage);
-                context.Result = new LocalRedirectResult(pageUrl, false);
-            }
-
-            /// <summary>
-            /// Called after the action executes, before the action result
-            /// </summary>
-            /// <param name="context">A context for action filters</param>
-            public void OnActionExecuted(ActionExecutedContext context)
-            {
-                //do nothing
-            }
-
-            #endregion
+        /// <summary>
+        /// Called asynchronously before the action, after model binding is complete.
+        /// </summary>
+        /// <param name="context">A context for action filters</param>
+        /// <param name="next">A delegate invoked to execute the next action filter or the action itself</param>
+        /// <returns>A task that represents the asynchronous operation</returns>
+        public async Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
+        {
+            await CheckLanguageSeoCodeAsync(context);
+            if (context.Result == null)
+                await next();
         }
 
         #endregion
     }
+
+    #endregion
 }

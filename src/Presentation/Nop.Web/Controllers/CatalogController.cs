@@ -1,312 +1,517 @@
-﻿using System.Linq;
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using Nop.Core;
 using Nop.Core.Domain.Catalog;
 using Nop.Core.Domain.Customers;
 using Nop.Core.Domain.Media;
 using Nop.Core.Domain.Vendors;
+using Nop.Core.Rss;
 using Nop.Services.Catalog;
 using Nop.Services.Common;
 using Nop.Services.Localization;
 using Nop.Services.Logging;
 using Nop.Services.Security;
+using Nop.Services.Seo;
 using Nop.Services.Stores;
 using Nop.Services.Vendors;
 using Nop.Web.Factories;
 using Nop.Web.Framework;
+using Nop.Web.Framework.Mvc;
+using Nop.Web.Framework.Mvc.Filters;
+using Nop.Web.Framework.Mvc.Routing;
 using Nop.Web.Models.Catalog;
 
-namespace Nop.Web.Controllers
+namespace Nop.Web.Controllers;
+
+[AutoValidateAntiforgeryToken]
+public partial class CatalogController : BasePublicController
 {
-    public partial class CatalogController : BasePublicController
+    #region Fields
+
+    protected readonly CatalogSettings _catalogSettings;
+    protected readonly IAclService _aclService;
+    protected readonly ICatalogModelFactory _catalogModelFactory;
+    protected readonly ICategoryService _categoryService;
+    protected readonly ICustomerActivityService _customerActivityService;
+    protected readonly IGenericAttributeService _genericAttributeService;
+    protected readonly ILocalizationService _localizationService;
+    protected readonly IManufacturerService _manufacturerService;
+    protected readonly INopUrlHelper _nopUrlHelper;
+    protected readonly IPermissionService _permissionService;
+    protected readonly IProductModelFactory _productModelFactory;
+    protected readonly IProductService _productService;
+    protected readonly IProductTagService _productTagService;
+    protected readonly IStoreContext _storeContext;
+    protected readonly IStoreMappingService _storeMappingService;
+    protected readonly IUrlRecordService _urlRecordService;
+    protected readonly IVendorService _vendorService;
+    protected readonly IWebHelper _webHelper;
+    protected readonly IWorkContext _workContext;
+    protected readonly MediaSettings _mediaSettings;
+    protected readonly VendorSettings _vendorSettings;
+
+    #endregion
+
+    #region Ctor
+
+    public CatalogController(CatalogSettings catalogSettings,
+        IAclService aclService,
+        ICatalogModelFactory catalogModelFactory,
+        ICategoryService categoryService,
+        ICustomerActivityService customerActivityService,
+        IGenericAttributeService genericAttributeService,
+        ILocalizationService localizationService,
+        IManufacturerService manufacturerService,
+        INopUrlHelper nopUrlHelper,
+        IPermissionService permissionService,
+        IProductModelFactory productModelFactory,
+        IProductService productService,
+        IProductTagService productTagService,
+        IStoreContext storeContext,
+        IStoreMappingService storeMappingService,
+        IUrlRecordService urlRecordService,
+        IVendorService vendorService,
+        IWebHelper webHelper,
+        IWorkContext workContext,
+        MediaSettings mediaSettings,
+        VendorSettings vendorSettings)
     {
-        #region Fields
-
-        private readonly CatalogSettings _catalogSettings;
-        private readonly IAclService _aclService;
-        private readonly ICatalogModelFactory _catalogModelFactory;
-        private readonly ICategoryService _categoryService;
-        private readonly ICustomerActivityService _customerActivityService;
-        private readonly IGenericAttributeService _genericAttributeService;
-        private readonly ILocalizationService _localizationService;
-        private readonly IManufacturerService _manufacturerService;
-        private readonly IPermissionService _permissionService;
-        private readonly IProductModelFactory _productModelFactory;
-        private readonly IProductService _productService;
-        private readonly IProductTagService _productTagService;
-        private readonly IStoreContext _storeContext;
-        private readonly IStoreMappingService _storeMappingService;
-        private readonly IVendorService _vendorService;
-        private readonly IWebHelper _webHelper;
-        private readonly IWorkContext _workContext;
-        private readonly MediaSettings _mediaSettings;
-        private readonly VendorSettings _vendorSettings;
-
-        #endregion
-
-        #region Ctor
-
-        public CatalogController(CatalogSettings catalogSettings,
-            IAclService aclService,
-            ICatalogModelFactory catalogModelFactory,
-            ICategoryService categoryService, 
-            ICustomerActivityService customerActivityService,
-            IGenericAttributeService genericAttributeService,
-            ILocalizationService localizationService,
-            IManufacturerService manufacturerService,
-            IPermissionService permissionService, 
-            IProductModelFactory productModelFactory,
-            IProductService productService, 
-            IProductTagService productTagService,
-            IStoreContext storeContext,
-            IStoreMappingService storeMappingService,
-            IVendorService vendorService,
-            IWebHelper webHelper,
-            IWorkContext workContext, 
-            MediaSettings mediaSettings,
-            VendorSettings vendorSettings)
-        {
-            _catalogSettings = catalogSettings;
-            _aclService = aclService;
-            _catalogModelFactory = catalogModelFactory;
-            _categoryService = categoryService;
-            _customerActivityService = customerActivityService;
-            _genericAttributeService = genericAttributeService;
-            _localizationService = localizationService;
-            _manufacturerService = manufacturerService;
-            _permissionService = permissionService;
-            _productModelFactory = productModelFactory;
-            _productService = productService;
-            _productTagService = productTagService;
-            _storeContext = storeContext;
-            _storeMappingService = storeMappingService;
-            _vendorService = vendorService;
-            _webHelper = webHelper;
-            _workContext = workContext;
-            _mediaSettings = mediaSettings;
-            _vendorSettings = vendorSettings;
-        }
-
-        #endregion
-        
-        #region Categories
-        
-        public virtual IActionResult Category(int categoryId, CatalogPagingFilteringModel command)
-        {
-            var category = _categoryService.GetCategoryById(categoryId);
-            if (category == null || category.Deleted)
-                return InvokeHttp404();
-
-            var notAvailable =
-                //published?
-                !category.Published ||
-                //ACL (access control list) 
-                !_aclService.Authorize(category) ||
-                //Store mapping
-                !_storeMappingService.Authorize(category);
-            //Check whether the current user has a "Manage categories" permission (usually a store owner)
-            //We should allows him (her) to use "Preview" functionality
-            var hasAdminAccess = _permissionService.Authorize(StandardPermissionProvider.AccessAdminPanel) && _permissionService.Authorize(StandardPermissionProvider.ManageCategories);
-            if (notAvailable && !hasAdminAccess)
-                return InvokeHttp404();
-
-            //'Continue shopping' URL
-            _genericAttributeService.SaveAttribute(_workContext.CurrentCustomer, 
-                NopCustomerDefaults.LastContinueShoppingPageAttribute, 
-                _webHelper.GetThisPageUrl(false),
-                _storeContext.CurrentStore.Id);
-
-            //display "edit" (manage) link
-            if (_permissionService.Authorize(StandardPermissionProvider.AccessAdminPanel) && _permissionService.Authorize(StandardPermissionProvider.ManageCategories))
-                DisplayEditLink(Url.Action("Edit", "Category", new { id = category.Id, area = AreaNames.Admin }));
-
-            //activity log
-            _customerActivityService.InsertActivity("PublicStore.ViewCategory",
-                string.Format(_localizationService.GetResource("ActivityLog.PublicStore.ViewCategory"), category.Name), category);
-
-            //model
-            var model = _catalogModelFactory.PrepareCategoryModel(category, command);
-
-            //template
-            var templateViewPath = _catalogModelFactory.PrepareCategoryTemplateViewPath(category.CategoryTemplateId);
-            return View(templateViewPath, model);
-        }
-
-        [HttpPost]
-        [IgnoreAntiforgeryToken]
-        public virtual IActionResult GetCatalogRoot()
-        {
-            var model = _catalogModelFactory.PrepareRootCategories();
-
-            return Json(model);
-        }
-
-        [HttpPost]
-        [IgnoreAntiforgeryToken]
-        public virtual IActionResult GetCatalogSubCategories(int id)
-        {
-            var model = _catalogModelFactory.PrepareSubCategories(id);
-
-            return Json(model);
-        }
-
-        #endregion
-
-        #region Manufacturers
-
-        public virtual IActionResult Manufacturer(int manufacturerId, CatalogPagingFilteringModel command)
-        {
-            var manufacturer = _manufacturerService.GetManufacturerById(manufacturerId);
-            if (manufacturer == null || manufacturer.Deleted)
-                return InvokeHttp404();
-
-            var notAvailable =
-                //published?
-                !manufacturer.Published ||
-                //ACL (access control list) 
-                !_aclService.Authorize(manufacturer) ||
-                //Store mapping
-                !_storeMappingService.Authorize(manufacturer);
-            //Check whether the current user has a "Manage categories" permission (usually a store owner)
-            //We should allows him (her) to use "Preview" functionality
-            var hasAdminAccess = _permissionService.Authorize(StandardPermissionProvider.AccessAdminPanel) && _permissionService.Authorize(StandardPermissionProvider.ManageManufacturers);
-            if (notAvailable && !hasAdminAccess)
-                return InvokeHttp404();
-
-            //'Continue shopping' URL
-            _genericAttributeService.SaveAttribute(_workContext.CurrentCustomer, 
-                NopCustomerDefaults.LastContinueShoppingPageAttribute, 
-                _webHelper.GetThisPageUrl(false),
-                _storeContext.CurrentStore.Id);
-            
-            //display "edit" (manage) link
-            if (_permissionService.Authorize(StandardPermissionProvider.AccessAdminPanel) && _permissionService.Authorize(StandardPermissionProvider.ManageManufacturers))
-                DisplayEditLink(Url.Action("Edit", "Manufacturer", new { id = manufacturer.Id, area = AreaNames.Admin }));
-
-            //activity log
-            _customerActivityService.InsertActivity("PublicStore.ViewManufacturer",
-                string.Format(_localizationService.GetResource("ActivityLog.PublicStore.ViewManufacturer"), manufacturer.Name), manufacturer);
-
-            //model
-            var model = _catalogModelFactory.PrepareManufacturerModel(manufacturer, command);
-            
-            //template
-            var templateViewPath = _catalogModelFactory.PrepareManufacturerTemplateViewPath(manufacturer.ManufacturerTemplateId);
-            return View(templateViewPath, model);
-        }
-
-        public virtual IActionResult ManufacturerAll()
-        {
-            var model = _catalogModelFactory.PrepareManufacturerAllModels();
-            return View(model);
-        }
-        
-        #endregion
-
-        #region Vendors
-
-        public virtual IActionResult Vendor(int vendorId, CatalogPagingFilteringModel command)
-        {
-            var vendor = _vendorService.GetVendorById(vendorId);
-            if (vendor == null || vendor.Deleted || !vendor.Active)
-                return InvokeHttp404();
-
-            //'Continue shopping' URL
-            _genericAttributeService.SaveAttribute(_workContext.CurrentCustomer,
-                NopCustomerDefaults.LastContinueShoppingPageAttribute,
-                _webHelper.GetThisPageUrl(false),
-                _storeContext.CurrentStore.Id);
-            
-            //display "edit" (manage) link
-            if (_permissionService.Authorize(StandardPermissionProvider.AccessAdminPanel) && _permissionService.Authorize(StandardPermissionProvider.ManageVendors))
-                DisplayEditLink(Url.Action("Edit", "Vendor", new { id = vendor.Id, area = AreaNames.Admin }));
-
-            //model
-            var model = _catalogModelFactory.PrepareVendorModel(vendor, command);
-
-            return View(model);
-        }
-
-        public virtual IActionResult VendorAll()
-        {
-            //we don't allow viewing of vendors if "vendors" block is hidden
-            if (_vendorSettings.VendorsBlockItemsToDisplay == 0)
-                return RedirectToRoute("Homepage");
-
-            var model = _catalogModelFactory.PrepareVendorAllModels();
-            return View(model);
-        }
-
-        #endregion
-
-        #region Product tags
-        
-        public virtual IActionResult ProductsByTag(int productTagId, CatalogPagingFilteringModel command)
-        {
-            var productTag = _productTagService.GetProductTagById(productTagId);
-            if (productTag == null)
-                return InvokeHttp404();
-
-            var model = _catalogModelFactory.PrepareProductsByTagModel(productTag, command);
-            return View(model);
-        }
-
-        public virtual IActionResult ProductTagsAll()
-        {
-            var model = _catalogModelFactory.PrepareProductTagsAllModel();
-            return View(model);
-        }
-
-        #endregion
-
-        #region Searching
-
-        public virtual IActionResult Search(SearchModel model, CatalogPagingFilteringModel command)
-        {
-            //'Continue shopping' URL
-            _genericAttributeService.SaveAttribute(_workContext.CurrentCustomer,
-                NopCustomerDefaults.LastContinueShoppingPageAttribute,
-                _webHelper.GetThisPageUrl(true),
-                _storeContext.CurrentStore.Id);
-
-            if (model == null)
-                model = new SearchModel();
-
-            model = _catalogModelFactory.PrepareSearchModel(model, command);
-            return View(model);
-        }
-
-        public virtual IActionResult SearchTermAutoComplete(string term)
-        {
-            if (string.IsNullOrWhiteSpace(term) || term.Length < _catalogSettings.ProductSearchTermMinimumLength)
-                return Content("");
-
-            //products
-            var productNumber = _catalogSettings.ProductSearchAutoCompleteNumberOfProducts > 0 ?
-                _catalogSettings.ProductSearchAutoCompleteNumberOfProducts : 10;            
-
-            var products = _productService.SearchProducts(
-                storeId: _storeContext.CurrentStore.Id,
-                keywords: term,
-                languageId: _workContext.WorkingLanguage.Id,
-                visibleIndividuallyOnly: true,
-                pageSize: productNumber);
-
-            var showLinkToResultSearch = _catalogSettings.ShowLinkToAllResultInSearchAutoComplete && (products.TotalCount > productNumber);
-
-            var models =  _productModelFactory.PrepareProductOverviewModels(products, false, _catalogSettings.ShowProductImagesInSearchAutoComplete, _mediaSettings.AutoCompleteSearchThumbPictureSize).ToList();
-            var result = (from p in models
-                    select new
-                    {
-                        label = p.Name,
-                        producturl = Url.RouteUrl("Product", new {SeName = p.SeName}),
-                        productpictureurl = p.DefaultPictureModel.ImageUrl,
-                        showlinktoresultsearch = showLinkToResultSearch
-                    })
-                .ToList();
-            return Json(result);
-        }
-        
-        #endregion
+        _catalogSettings = catalogSettings;
+        _aclService = aclService;
+        _catalogModelFactory = catalogModelFactory;
+        _categoryService = categoryService;
+        _customerActivityService = customerActivityService;
+        _genericAttributeService = genericAttributeService;
+        _localizationService = localizationService;
+        _manufacturerService = manufacturerService;
+        _nopUrlHelper = nopUrlHelper;
+        _permissionService = permissionService;
+        _productModelFactory = productModelFactory;
+        _productService = productService;
+        _productTagService = productTagService;
+        _storeContext = storeContext;
+        _storeMappingService = storeMappingService;
+        _urlRecordService = urlRecordService;
+        _vendorService = vendorService;
+        _webHelper = webHelper;
+        _workContext = workContext;
+        _mediaSettings = mediaSettings;
+        _vendorSettings = vendorSettings;
     }
+
+    #endregion
+
+    #region Categories
+
+    public virtual async Task<IActionResult> Category(int categoryId, CatalogProductsCommand command)
+    {
+        var category = await _categoryService.GetCategoryByIdAsync(categoryId);
+
+        if (!await CheckCategoryAvailabilityAsync(category))
+            return InvokeHttp404();
+
+        var store = await _storeContext.GetCurrentStoreAsync();
+
+        //'Continue shopping' URL
+        await _genericAttributeService.SaveAttributeAsync(await _workContext.GetCurrentCustomerAsync(),
+            NopCustomerDefaults.LastContinueShoppingPageAttribute,
+            _webHelper.GetThisPageUrl(false),
+            store.Id);
+
+        //display "edit" (manage) link
+        if (await _permissionService.AuthorizeAsync(StandardPermission.Security.ACCESS_ADMIN_PANEL) && await _permissionService.AuthorizeAsync(StandardPermission.Catalog.CATEGORIES_VIEW))
+            DisplayEditLink(Url.Action("Edit", "Category", new { id = category.Id, area = AreaNames.ADMIN }));
+
+        //activity log
+        await _customerActivityService.InsertActivityAsync("PublicStore.ViewCategory",
+            string.Format(await _localizationService.GetResourceAsync("ActivityLog.PublicStore.ViewCategory"), category.Name), category);
+
+        //model
+        var model = await _catalogModelFactory.PrepareCategoryModelAsync(category, command);
+
+        //template
+        var templateViewPath = await _catalogModelFactory.PrepareCategoryTemplateViewPathAsync(category.CategoryTemplateId);
+        return View(templateViewPath, model);
+    }
+
+    //ignore SEO friendly URLs checks
+    [CheckLanguageSeoCode(ignore: true)]
+    public virtual async Task<IActionResult> GetCategoryProducts(int categoryId, CatalogProductsCommand command)
+    {
+        var category = await _categoryService.GetCategoryByIdAsync(categoryId);
+
+        if (!await CheckCategoryAvailabilityAsync(category))
+            return NotFound();
+
+        var model = await _catalogModelFactory.PrepareCategoryProductsModelAsync(category, command);
+
+        return PartialView("_ProductsInGridOrLines", model);
+    }
+
+    [HttpPost]
+    public virtual async Task<IActionResult> GetCatalogRoot()
+    {
+        var model = await _catalogModelFactory.PrepareRootCategoriesAsync();
+
+        return Json(model);
+    }
+
+    [HttpPost]
+    public virtual async Task<IActionResult> GetCatalogSubCategories(int id)
+    {
+        var model = await _catalogModelFactory.PrepareSubCategoriesAsync(id);
+
+        return Json(model);
+    }
+
+    #endregion
+
+    #region Manufacturers
+
+    public virtual async Task<IActionResult> Manufacturer(int manufacturerId, CatalogProductsCommand command)
+    {
+        var manufacturer = await _manufacturerService.GetManufacturerByIdAsync(manufacturerId);
+
+        if (!await CheckManufacturerAvailabilityAsync(manufacturer))
+            return InvokeHttp404();
+
+        var store = await _storeContext.GetCurrentStoreAsync();
+
+        //'Continue shopping' URL
+        await _genericAttributeService.SaveAttributeAsync(await _workContext.GetCurrentCustomerAsync(),
+            NopCustomerDefaults.LastContinueShoppingPageAttribute,
+            _webHelper.GetThisPageUrl(false),
+            store.Id);
+
+        //display "edit" (manage) link
+        if (await _permissionService.AuthorizeAsync(StandardPermission.Security.ACCESS_ADMIN_PANEL) && await _permissionService.AuthorizeAsync(StandardPermission.Catalog.MANUFACTURER_VIEW))
+            DisplayEditLink(Url.Action("Edit", "Manufacturer", new { id = manufacturer.Id, area = AreaNames.ADMIN }));
+
+        //activity log
+        await _customerActivityService.InsertActivityAsync("PublicStore.ViewManufacturer",
+            string.Format(await _localizationService.GetResourceAsync("ActivityLog.PublicStore.ViewManufacturer"), manufacturer.Name), manufacturer);
+
+        //model
+        var model = await _catalogModelFactory.PrepareManufacturerModelAsync(manufacturer, command);
+
+        //template
+        var templateViewPath = await _catalogModelFactory.PrepareManufacturerTemplateViewPathAsync(manufacturer.ManufacturerTemplateId);
+
+        return View(templateViewPath, model);
+    }
+
+    //ignore SEO friendly URLs checks
+    [CheckLanguageSeoCode(ignore: true)]
+    public virtual async Task<IActionResult> GetManufacturerProducts(int manufacturerId, CatalogProductsCommand command)
+    {
+        var manufacturer = await _manufacturerService.GetManufacturerByIdAsync(manufacturerId);
+
+        if (!await CheckManufacturerAvailabilityAsync(manufacturer))
+            return NotFound();
+
+        var model = await _catalogModelFactory.PrepareManufacturerProductsModelAsync(manufacturer, command);
+
+        return PartialView("_ProductsInGridOrLines", model);
+    }
+
+    public virtual async Task<IActionResult> ManufacturerAll()
+    {
+        var model = await _catalogModelFactory.PrepareManufacturerAllModelsAsync();
+
+        return View(model);
+    }
+
+    #endregion
+
+    #region Vendors
+
+    public virtual async Task<IActionResult> Vendor(int vendorId, CatalogProductsCommand command)
+    {
+        var vendor = await _vendorService.GetVendorByIdAsync(vendorId);
+
+        if (!await CheckVendorAvailabilityAsync(vendor))
+            return InvokeHttp404();
+
+        var store = await _storeContext.GetCurrentStoreAsync();
+
+        //'Continue shopping' URL
+        await _genericAttributeService.SaveAttributeAsync(await _workContext.GetCurrentCustomerAsync(),
+            NopCustomerDefaults.LastContinueShoppingPageAttribute,
+            _webHelper.GetThisPageUrl(false),
+            store.Id);
+
+        //display "edit" (manage) link
+        if (await _permissionService.AuthorizeAsync(StandardPermission.Security.ACCESS_ADMIN_PANEL) && await _permissionService.AuthorizeAsync(StandardPermission.Customers.VENDORS_VIEW))
+            DisplayEditLink(Url.Action("Edit", "Vendor", new { id = vendor.Id, area = AreaNames.ADMIN }));
+
+        //model
+        var model = await _catalogModelFactory.PrepareVendorModelAsync(vendor, command);
+
+        return View(model);
+    }
+
+    //ignore SEO friendly URLs checks
+    [CheckLanguageSeoCode(ignore: true)]
+    public virtual async Task<IActionResult> GetVendorProducts(int vendorId, CatalogProductsCommand command)
+    {
+        var vendor = await _vendorService.GetVendorByIdAsync(vendorId);
+
+        if (!await CheckVendorAvailabilityAsync(vendor))
+            return NotFound();
+
+        var model = await _catalogModelFactory.PrepareVendorProductsModelAsync(vendor, command);
+
+        return PartialView("_ProductsInGridOrLines", model);
+    }
+
+    public virtual async Task<IActionResult> VendorAll()
+    {
+        //we don't allow viewing of vendors if "vendors" block is hidden
+        if (_vendorSettings.VendorsBlockItemsToDisplay == 0)
+            return RedirectToRoute("Homepage");
+
+        var model = await _catalogModelFactory.PrepareVendorAllModelsAsync();
+        return View(model);
+    }
+
+    #endregion
+
+    #region Product tags
+
+    public virtual async Task<IActionResult> ProductsByTag(int productTagId, CatalogProductsCommand command)
+    {
+        var productTag = await _productTagService.GetProductTagByIdAsync(productTagId);
+        if (productTag == null)
+            return InvokeHttp404();
+
+        var model = await _catalogModelFactory.PrepareProductsByTagModelAsync(productTag, command);
+
+        return View(model);
+    }
+
+    //ignore SEO friendly URLs checks
+    [CheckLanguageSeoCode(ignore: true)]
+    public virtual async Task<IActionResult> GetTagProducts(int tagId, CatalogProductsCommand command)
+    {
+        var productTag = await _productTagService.GetProductTagByIdAsync(tagId);
+        if (productTag == null)
+            return NotFound();
+
+        var model = await _catalogModelFactory.PrepareTagProductsModelAsync(productTag, command);
+
+        return PartialView("_ProductsInGridOrLines", model);
+    }
+
+    public virtual async Task<IActionResult> ProductTagsAll()
+    {
+        var model = await _catalogModelFactory.PreparePopularProductTagsModelAsync();
+
+        return View(model);
+    }
+
+    #endregion
+
+    #region New (recently added) products page
+
+    public virtual async Task<IActionResult> NewProducts(CatalogProductsCommand command)
+    {
+        if (!_catalogSettings.NewProductsEnabled)
+            return InvokeHttp404();
+
+        var model = new NewProductsModel
+        {
+            CatalogProductsModel = await _catalogModelFactory.PrepareNewProductsModelAsync(command)
+        };
+
+        return View(model);
+    }
+
+    //ignore SEO friendly URLs checks
+    [CheckLanguageSeoCode(ignore: true)]
+    public virtual async Task<IActionResult> GetNewProducts(CatalogProductsCommand command)
+    {
+        if (!_catalogSettings.NewProductsEnabled)
+            return NotFound();
+
+        var model = await _catalogModelFactory.PrepareNewProductsModelAsync(command);
+
+        return PartialView("_ProductsInGridOrLines", model);
+    }
+
+    [CheckLanguageSeoCode(ignore: true)]
+    public virtual async Task<IActionResult> NewProductsRss()
+    {
+        var store = await _storeContext.GetCurrentStoreAsync();
+        var feed = new RssFeed(
+            $"{await _localizationService.GetLocalizedAsync(store, x => x.Name)}: New products",
+            "Information about products",
+            new Uri(_webHelper.GetStoreLocation()),
+            DateTime.UtcNow);
+
+        if (!_catalogSettings.NewProductsEnabled)
+            return new RssActionResult(feed, _webHelper.GetThisPageUrl(false));
+
+        var items = new List<RssItem>();
+
+        var storeId = store.Id;
+        var products = await _productService.GetProductsMarkedAsNewAsync(storeId: storeId);
+
+        foreach (var product in products)
+        {
+            var seName = await _urlRecordService.GetSeNameAsync(product);
+            var productUrl = await _nopUrlHelper.RouteGenericUrlAsync<Product>(new { SeName = seName }, _webHelper.GetCurrentRequestProtocol());
+            var productName = await _localizationService.GetLocalizedAsync(product, x => x.Name);
+            var productDescription = await _localizationService.GetLocalizedAsync(product, x => x.ShortDescription);
+            var item = new RssItem(productName, productDescription, new Uri(productUrl), $"urn:store:{store.Id}:newProducts:product:{product.Id}", product.CreatedOnUtc);
+            items.Add(item);
+            //uncomment below if you want to add RSS enclosure for pictures
+            //var picture = _pictureService.GetPicturesByProductId(product.Id, 1).FirstOrDefault();
+            //if (picture != null)
+            //{
+            //    var imageUrl = _pictureService.GetPictureUrl(picture, _mediaSettings.ProductDetailsPictureSize);
+            //    item.ElementExtensions.Add(new XElement("enclosure", new XAttribute("type", "image/jpeg"), new XAttribute("url", imageUrl), new XAttribute("length", picture.PictureBinary.Length)));
+            //}
+
+        }
+        feed.Items = items;
+        return new RssActionResult(feed, _webHelper.GetThisPageUrl(false));
+    }
+
+    #endregion
+
+    #region Searching
+
+    public virtual async Task<IActionResult> Search(SearchModel model, CatalogProductsCommand command)
+    {
+        var store = await _storeContext.GetCurrentStoreAsync();
+
+        //'Continue shopping' URL
+        await _genericAttributeService.SaveAttributeAsync(await _workContext.GetCurrentCustomerAsync(),
+            NopCustomerDefaults.LastContinueShoppingPageAttribute,
+            _webHelper.GetThisPageUrl(true),
+            store.Id);
+
+        if (model == null)
+            model = new SearchModel();
+
+        model = await _catalogModelFactory.PrepareSearchModelAsync(model, command);
+
+        return View(model);
+    }
+
+    [CheckLanguageSeoCode(ignore: true)]
+    public virtual async Task<IActionResult> SearchTermAutoComplete(string term)
+    {
+        if (string.IsNullOrWhiteSpace(term))
+            return Content("");
+
+        term = term.Trim();
+
+        if (string.IsNullOrWhiteSpace(term) || term.Length < _catalogSettings.ProductSearchTermMinimumLength)
+            return Content("");
+
+        //products
+        var productNumber = _catalogSettings.ProductSearchAutoCompleteNumberOfProducts > 0 ?
+            _catalogSettings.ProductSearchAutoCompleteNumberOfProducts : 10;
+        var store = await _storeContext.GetCurrentStoreAsync();
+        var products = await _productService.SearchProductsAsync(0,
+            storeId: store.Id,
+            keywords: term,
+            languageId: (await _workContext.GetWorkingLanguageAsync()).Id,
+            visibleIndividuallyOnly: true,
+            pageSize: productNumber);
+
+        var showLinkToResultSearch = _catalogSettings.ShowLinkToAllResultInSearchAutoComplete && (products.TotalCount > productNumber);
+
+        var models = (await _productModelFactory.PrepareProductOverviewModelsAsync(products, false, _catalogSettings.ShowProductImagesInSearchAutoComplete, _mediaSettings.AutoCompleteSearchThumbPictureSize)).ToList();
+        var result = (from p in models
+                select new
+                {
+                    label = p.Name,
+                    producturl = Url.RouteUrl<Product>(new { SeName = p.SeName }),
+                    productpictureurl = p.PictureModels.FirstOrDefault()?.ImageUrl,
+                    showlinktoresultsearch = showLinkToResultSearch
+                })
+            .ToList();
+        return Json(result);
+    }
+
+    //ignore SEO friendly URLs checks
+    [CheckLanguageSeoCode(ignore: true)]
+    public virtual async Task<IActionResult> SearchProducts(SearchModel searchModel, CatalogProductsCommand command)
+    {
+        if (searchModel == null)
+            searchModel = new SearchModel();
+
+        var model = await _catalogModelFactory.PrepareSearchProductsModelAsync(searchModel, command);
+
+        return PartialView("_ProductsInGridOrLines", model);
+    }
+
+    #endregion
+
+    #region Utilities
+
+    protected virtual async Task<bool> CheckCategoryAvailabilityAsync(Category category)
+    {
+        if (category is null)
+            return false;
+
+        var isAvailable = true;
+
+        if (category.Deleted)
+            isAvailable = false;
+
+        var notAvailable =
+            //published?
+            !category.Published ||
+            //ACL (access control list) 
+            !await _aclService.AuthorizeAsync(category) ||
+            //Store mapping
+            !await _storeMappingService.AuthorizeAsync(category);
+        //Check whether the current user has a "Manage categories" permission (usually a store owner)
+        //We should allows him (her) to use "Preview" functionality
+        var hasAdminAccess = await _permissionService.AuthorizeAsync(StandardPermission.Security.ACCESS_ADMIN_PANEL) && await _permissionService.AuthorizeAsync(StandardPermission.Catalog.CATEGORIES_VIEW);
+        if (notAvailable && !hasAdminAccess)
+            isAvailable = false;
+
+        return isAvailable;
+    }
+
+    protected virtual async Task<bool> CheckManufacturerAvailabilityAsync(Manufacturer manufacturer)
+    {
+        if (manufacturer == null)
+            return false;
+
+        var isAvailable = true;
+
+        if (manufacturer.Deleted)
+            isAvailable = false;
+
+        var notAvailable =
+            //published?
+            !manufacturer.Published ||
+            //ACL (access control list) 
+            !await _aclService.AuthorizeAsync(manufacturer) ||
+            //Store mapping
+            !await _storeMappingService.AuthorizeAsync(manufacturer);
+        //Check whether the current user has a "Manage categories" permission (usually a store owner)
+        //We should allows him (her) to use "Preview" functionality
+        var hasAdminAccess = await _permissionService.AuthorizeAsync(StandardPermission.Security.ACCESS_ADMIN_PANEL) && await _permissionService.AuthorizeAsync(StandardPermission.Catalog.MANUFACTURER_VIEW);
+        if (notAvailable && !hasAdminAccess)
+            isAvailable = false;
+
+        return isAvailable;
+    }
+
+    protected virtual Task<bool> CheckVendorAvailabilityAsync(Vendor vendor)
+    {
+        var isAvailable = true;
+
+        if (vendor == null || vendor.Deleted || !vendor.Active)
+            isAvailable = false;
+
+        return Task.FromResult(isAvailable);
+    }
+
+    #endregion
 }

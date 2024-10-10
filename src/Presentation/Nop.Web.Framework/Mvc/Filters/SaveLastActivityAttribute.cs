@@ -1,99 +1,104 @@
-﻿using System;
-using System.Net;
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Nop.Core;
 using Nop.Core.Domain.Customers;
+using Nop.Core.Http.Extensions;
 using Nop.Data;
-using Nop.Services.Customers;
 
-namespace Nop.Web.Framework.Mvc.Filters
+namespace Nop.Web.Framework.Mvc.Filters;
+
+/// <summary>
+/// Represents filter attribute that saves last customer activity date
+/// </summary>
+public sealed class SaveLastActivityAttribute : TypeFilterAttribute
 {
-    /// <summary>
-    /// Represents filter attribute that saves last customer activity date
-    /// </summary>
-    public sealed class SaveLastActivityAttribute : TypeFilterAttribute
-    {
-        #region Ctor
+    #region Ctor
 
-        /// <summary>
-        /// Create instance of the filter attribute
-        /// </summary>
-        public SaveLastActivityAttribute() : base(typeof(SaveLastActivityFilter))
-        {
-        }
-        
+    /// <summary>
+    /// Create instance of the filter attribute
+    /// </summary>
+    public SaveLastActivityAttribute() : base(typeof(SaveLastActivityFilter))
+    {
+    }
+
+    #endregion
+
+    #region Nested filter
+
+    /// <summary>
+    /// Represents a filter that saves last customer activity date
+    /// </summary>
+    private class SaveLastActivityFilter : IAsyncActionFilter
+    {
+        #region Fields
+
+        protected readonly CustomerSettings _customerSettings;
+        protected readonly IRepository<Customer> _customerRepository;
+        protected readonly IWorkContext _workContext;
+
         #endregion
 
-        #region Nested filter
+        #region Ctor
+
+        public SaveLastActivityFilter(CustomerSettings customerSettings,
+            IRepository<Customer> customerRepository,
+            IWorkContext workContext)
+        {
+            _customerSettings = customerSettings;
+            _customerRepository = customerRepository;
+            _workContext = workContext;
+        }
+
+        #endregion
+
+        #region Utilities
 
         /// <summary>
-        /// Represents a filter that saves last customer activity date
+        /// Called asynchronously before the action, after model binding is complete.
         /// </summary>
-        private class SaveLastActivityFilter : IActionFilter
+        /// <param name="context">A context for action filters</param>
+        /// <returns>A task that represents the asynchronous operation</returns>
+        private async Task SaveLastActivityAsync(ActionExecutingContext context)
         {
-            #region Fields
+            ArgumentNullException.ThrowIfNull(context);
 
-            private readonly CustomerSettings _customerSettings;
-            private readonly ICustomerService _customerService;
-            private readonly IWorkContext _workContext;
+            //only in GET requests
+            if (!context.HttpContext.Request.IsGetRequest())
+                return;
 
-            #endregion
+            if (!DataSettingsManager.IsDatabaseInstalled())
+                return;
 
-            #region Ctor
-
-            public SaveLastActivityFilter(CustomerSettings customerSettings,
-                ICustomerService customerService,
-                IWorkContext workContext)
+            //update last activity date
+            var customer = await _workContext.GetCurrentCustomerAsync();
+            if (customer.LastActivityDateUtc.AddMinutes(_customerSettings.LastActivityMinutes) < DateTime.UtcNow)
             {
-                _customerSettings = customerSettings;
-                _customerService = customerService;
-                _workContext = workContext;
+                customer.LastActivityDateUtc = DateTime.UtcNow;
+
+                //update customer without event notification
+                await _customerRepository.UpdateAsync(customer, false);
             }
+        }
 
-            #endregion
+        #endregion
 
-            #region Methods
+        #region Methods
 
-            /// <summary>
-            /// Called before the action executes, after model binding is complete
-            /// </summary>
-            /// <param name="context">A context for action filters</param>
-            public void OnActionExecuting(ActionExecutingContext context)
-            {
-                if (context == null)
-                    throw new ArgumentNullException(nameof(context));
-
-                if (context.HttpContext.Request == null)
-                    return;
-
-                //only in GET requests
-                if (!context.HttpContext.Request.Method.Equals(WebRequestMethods.Http.Get, StringComparison.InvariantCultureIgnoreCase))
-                    return;
-
-                if (!DataSettingsManager.DatabaseIsInstalled)
-                    return;
-
-                //update last activity date
-                if (_workContext.CurrentCustomer.LastActivityDateUtc.AddMinutes(_customerSettings.LastActivityMinutes) < DateTime.UtcNow)
-                {
-                    _workContext.CurrentCustomer.LastActivityDateUtc = DateTime.UtcNow;
-                    _customerService.UpdateCustomer(_workContext.CurrentCustomer);
-                }
-            }
-
-            /// <summary>
-            /// Called after the action executes, before the action result
-            /// </summary>
-            /// <param name="context">A context for action filters</param>
-            public void OnActionExecuted(ActionExecutedContext context)
-            {
-                //do nothing
-            }
-
-            #endregion
+        /// <summary>
+        /// Called asynchronously before the action, after model binding is complete.
+        /// </summary>
+        /// <param name="context">A context for action filters</param>
+        /// <param name="next">A delegate invoked to execute the next action filter or the action itself</param>
+        /// <returns>A task that represents the asynchronous operation</returns>
+        public async Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
+        {
+            await SaveLastActivityAsync(context);
+            if (context.Result == null)
+                await next();
         }
 
         #endregion
     }
+
+    #endregion
 }

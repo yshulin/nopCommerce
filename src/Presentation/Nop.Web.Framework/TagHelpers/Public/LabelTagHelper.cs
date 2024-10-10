@@ -1,43 +1,57 @@
-﻿using System.Threading.Tasks;
-using Microsoft.AspNetCore.Mvc.ViewFeatures;
+﻿using Microsoft.AspNetCore.Mvc.ViewFeatures;
 using Microsoft.AspNetCore.Razor.TagHelpers;
 
-namespace Nop.Web.Framework.TagHelpers.Public
+namespace Nop.Web.Framework.TagHelpers.Public;
+
+/// <summary>
+/// "label" tag helper
+/// </summary>
+[HtmlTargetElement("label", Attributes = FOR_ATTRIBUTE_NAME)]
+public partial class LabelTagHelper : Microsoft.AspNetCore.Mvc.TagHelpers.LabelTagHelper
 {
-    /// <summary>
-    /// label tag helper
-    /// </summary>
-    [HtmlTargetElement("label", Attributes = ForAttributeName)]
-    public class LabelTagHelper : Microsoft.AspNetCore.Mvc.TagHelpers.LabelTagHelper
+    #region Constants
+
+    protected const string FOR_ATTRIBUTE_NAME = "asp-for";
+    protected const string POSTFIX_ATTRIBUTE_NAME = "asp-postfix";
+
+    #endregion
+
+    #region Ctor
+
+    public LabelTagHelper(IHtmlGenerator generator) : base(generator)
     {
-        private const string ForAttributeName = "asp-for";
-        private const string PostfixAttributeName = "asp-postfix";
-
-        /// <summary>
-        /// Indicates whether the input is disabled
-        /// </summary>
-        [HtmlAttributeName(PostfixAttributeName)]
-        public string Postfix { get; set; }
-
-        /// <summary>
-        /// Ctor
-        /// </summary>
-        /// <param name="generator">HTML generator</param>
-        public LabelTagHelper(IHtmlGenerator generator) : base(generator)
-        {
-        }
-
-        /// <summary>
-        /// Process
-        /// </summary>
-        /// <param name="context">Context</param>
-        /// <param name="output">Output</param>
-        /// <returns>Task</returns>
-        public override Task ProcessAsync(TagHelperContext context, TagHelperOutput output)
-        {
-            output.Content.Append(Postfix);
-
-            return base.ProcessAsync(context, output);
-        }
     }
+
+    #endregion
+
+    #region Methods
+
+    /// <summary>
+    /// Asynchronously executes the tag helper with the given context and output
+    /// </summary>
+    /// <param name="context">Contains information associated with the current HTML tag</param>
+    /// <param name="output">A stateful HTML element used to generate an HTML tag</param>
+    /// <returns>A task that represents the asynchronous operation</returns>
+    public override async Task ProcessAsync(TagHelperContext context, TagHelperOutput output)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        ArgumentNullException.ThrowIfNull(output);
+
+        output.Content.Append(Postfix);
+
+        await base.ProcessAsync(context, output);
+    }
+
+    #endregion
+
+    #region Properties
+
+    /// <summary>
+    /// Indicates whether the input is disabled
+    /// </summary>
+    [HtmlAttributeName(POSTFIX_ATTRIBUTE_NAME)]
+    public string Postfix { get; set; }
+
+    #endregion
 }

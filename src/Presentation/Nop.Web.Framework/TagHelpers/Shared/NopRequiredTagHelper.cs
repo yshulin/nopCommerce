@@ -1,38 +1,37 @@
-﻿using System;
-using Microsoft.AspNetCore.Razor.TagHelpers;
+﻿using Microsoft.AspNetCore.Razor.TagHelpers;
 
-namespace Nop.Web.Framework.TagHelpers.Shared
+namespace Nop.Web.Framework.TagHelpers.Shared;
+
+/// <summary>
+/// "nop-required" tag helper
+/// </summary>
+[HtmlTargetElement("nop-required", TagStructure = TagStructure.WithoutEndTag)]
+public partial class NopRequiredTagHelper : TagHelper
 {
+    #region Methods
+
     /// <summary>
-    /// nop-required tag helper
+    /// Asynchronously executes the tag helper with the given context and output
     /// </summary>
-    [HtmlTargetElement("nop-required", TagStructure = TagStructure.WithoutEndTag)]
-    public class NopRequiredTagHelper : TagHelper
+    /// <param name="context">Contains information associated with the current HTML tag</param>
+    /// <param name="output">A stateful HTML element used to generate an HTML tag</param>
+    /// <returns>A task that represents the asynchronous operation</returns>
+    public override Task ProcessAsync(TagHelperContext context, TagHelperOutput output)
     {
-        /// <summary>
-        /// Process
-        /// </summary>
-        /// <param name="context">Context</param>
-        /// <param name="output">Output</param>
-        public override void Process(TagHelperContext context, TagHelperOutput output)
-        {
-            if (context == null)
-            {
-                throw new ArgumentNullException(nameof(context));
-            }
+        ArgumentNullException.ThrowIfNull(context);
 
-            if (output == null)
-            {
-                throw new ArgumentNullException(nameof(output));
-            }
+        ArgumentNullException.ThrowIfNull(output);
 
-            //clear the output
-            output.SuppressOutput();
+        //clear the output
+        output.SuppressOutput();
 
-            output.TagName = "span";
-            output.TagMode = TagMode.StartTagAndEndTag;
-            output.Attributes.SetAttribute("class", "required");
-            output.Content.SetContent("*");
-        }
+        output.TagName = "span";
+        output.TagMode = TagMode.StartTagAndEndTag;
+        output.Attributes.SetAttribute("class", "required");
+        output.Content.SetContent("*");
+
+        return Task.CompletedTask;
     }
+
+    #endregion
 }

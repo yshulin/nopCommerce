@@ -1,7 +1,7 @@
 @model TopicModel
 
-<div class="panel-body">
-    <div class="form-group">
+<div class="card-body">
+    <div class="form-group row">
         <div class="col-md-3">
             <nop-label asp-for="Published" />
         </div>
@@ -10,7 +10,7 @@
             <span asp-validation-for="Published"></span>
         </div>
     </div>
-    <div class="form-group">
+    <div class="form-group row">
         <div class="col-md-3">
             <nop-label asp-for="IncludeInTopMenu" />
         </div>
@@ -19,7 +19,7 @@
             <span asp-validation-for="IncludeInTopMenu"></span>
         </div>
     </div>
-    <div class="form-group">
+    <div class="form-group row">
         <div class="col-md-3">
             <nop-label asp-for="IncludeInFooterColumn1" />
         </div>
@@ -28,7 +28,7 @@
             <span asp-validation-for="IncludeInFooterColumn1"></span>
         </div>
     </div>
-    <div class="form-group">
+    <div class="form-group row">
         <div class="col-md-3">
             <nop-label asp-for="IncludeInFooterColumn2" />
         </div>
@@ -37,7 +37,7 @@
             <span asp-validation-for="IncludeInFooterColumn2"></span>
         </div>
     </div>
-    <div class="form-group">
+    <div class="form-group row">
         <div class="col-md-3">
             <nop-label asp-for="IncludeInFooterColumn3" />
         </div>
@@ -46,7 +46,7 @@
             <span asp-validation-for="IncludeInFooterColumn3"></span>
         </div>
     </div>
-    <div class="form-group advanced-setting">
+    <div class="form-group row advanced-setting">
         <div class="col-md-3">
             <nop-label asp-for="IncludeInSitemap" />
         </div>
@@ -55,7 +55,7 @@
             <span asp-validation-for="IncludeInSitemap"></span>
         </div>
     </div>
-    <div class="form-group advanced-setting">
+    <div class="form-group row advanced-setting">
         <div class="col-md-3">
             <nop-label asp-for="IsPasswordProtected" />
         </div>
@@ -65,53 +65,18 @@
         </div>
     </div>
     <nop-nested-setting asp-for="IsPasswordProtected">
-        <div class="form-group advanced-setting" id="pnlPasswordEnabled">
+        <div class="form-group row advanced-setting">
             <div class="col-md-3">
                 <nop-label asp-for="Password" />
             </div>
             <div class="col-md-9">
-                <nop-editor asp-for="Password" />
+                <nop-editor asp-for="Password" html-attributes="@(new { autocomplete = "off" })"/>
                 <span asp-validation-for="Password"></span>
             </div>
         </div>
     </nop-nested-setting>
-    <div class="form-group advanced-setting">
-        <div class="col-md-3">
-            <nop-label asp-for="SelectedCustomerRoleIds" />
-        </div>
-        <div class="col-md-9">
-            <div class="row">
-                <div class="col-md-4">
-                    <nop-select asp-for="SelectedCustomerRoleIds" asp-items="Model.AvailableCustomerRoles" asp-multiple="true" />
-                    <script>
-                        $(document).ready(function() {
-                            var rolesIdsInput = $('#@Html.IdFor(model => model.SelectedCustomerRoleIds)').data("kendoMultiSelect");
-                            rolesIdsInput.setOptions({
-                                autoClose: false,
-                                filter: "contains"
-                            });
-
-                            @if (Model.AvailableCustomerRoles.Count == 0)
-                            {
-                                <text>
-                                    rolesIdsInput.setOptions({
-                                        enable: false,
-                                        placeholder: 'No customer roles available'
-                                    });
-                                    rolesIdsInput._placeholder();
-                                    rolesIdsInput._enable();
-                                </text>
-                            }
-                        });
-                    </script>
-                </div>
-                <div class="col-md-8">
-                    @await Component.InvokeAsync("AclDisabledWarning")
-                </div>
-            </div>
-        </div>
-    </div>
-    <div class="form-group advanced-setting">
+    @await Component.InvokeAsync(typeof(AclCustomerRolesViewComponent), Model)
+    <div class="form-group row advanced-setting">
         <div class="col-md-3">
             <nop-label asp-for="SelectedStoreIds" />
         </div>
@@ -120,34 +85,27 @@
                 <div class="col-md-4">
                     <nop-select asp-for="SelectedStoreIds" asp-items="Model.AvailableStores" asp-multiple="true" />
                     <script>
-                        $(document).ready(function() {
-                            var storesIdsInput = $('#@Html.IdFor(model => model.SelectedStoreIds)').data("kendoMultiSelect");
-                            storesIdsInput.setOptions({
-                                autoClose: false,
-                                filter: "contains"
-                            });
-
-                            @if (Model.AvailableStores.Count == 0)
-                            {
+                        $(function() {
+                            var storesIdsInput = $('#@Html.IdFor(model => model.SelectedStoreIds)').select2({
+                                closeOnSelect: false,
+                                @if (!Model.AvailableStores.Any())
+                                {
                                 <text>
-                                    storesIdsInput.setOptions({
-                                        enable: false,
-                                        placeholder: 'No stores available'
-                                    });
-                                    storesIdsInput._placeholder();
-                                    storesIdsInput._enable();
+                                disabled: true,
+                                placeholder: 'No stores available',
                                 </text>
-                            }
+                                }
+                            });
                         });
                     </script>
                 </div>
                 <div class="col-md-8">
-                    @await Component.InvokeAsync("MultistoreDisabledWarning")
+                    @await Component.InvokeAsync(typeof(MultistoreDisabledWarningViewComponent))
                 </div>
             </div>
         </div>
     </div>
-    <div class="form-group advanced-setting">
+    <div class="form-group row advanced-setting">
         <div class="col-md-3">
             <nop-label asp-for="AccessibleWhenStoreClosed" />
         </div>
@@ -156,7 +114,7 @@
             <span asp-validation-for="AccessibleWhenStoreClosed"></span>
         </div>
     </div>
-    <div class="form-group advanced-setting" @(Model.AvailableTopicTemplates.SelectionIsNotPossible() ? Html.Raw("style=\"display:none\"") : null)>
+    <div class="form-group row advanced-setting" @(Model.AvailableTopicTemplates.SelectionIsNotPossible() ? Html.Raw("style=\"display:none\"") : null)>
         <div class="col-md-3">
             <nop-label asp-for="TopicTemplateId" />
         </div>
@@ -165,7 +123,7 @@
             <span asp-validation-for="TopicTemplateId"></span>
         </div>
     </div>
-    <div class="form-group advanced-setting">
+    <div class="form-group row advanced-setting">
         <div class="col-md-3">
             <nop-label asp-for="DisplayOrder" />
         </div>
@@ -174,7 +132,7 @@
             <span asp-validation-for="DisplayOrder"></span>
         </div>
     </div>
-    <div class="form-group advanced-setting">
+    <div class="form-group row advanced-setting">
         <div class="col-md-3">
             <nop-label asp-for="SystemName" />
         </div>
@@ -184,18 +142,3 @@
         </div>
     </div>
 </div>
-
-<script>
-    $(document).ready(function () {
-        $("#@Html.IdFor(model => model.IsPasswordProtected)").click(togglePassword);
-        togglePassword();
-    });
-
-    function togglePassword() {
-        if ($('#@Html.IdFor(model => model.IsPasswordProtected)').is(':checked')) {
-            $('#pnlPasswordEnabled').show();
-        } else {
-            $('#pnlPasswordEnabled').hide();
-        }
-    }
-</script>

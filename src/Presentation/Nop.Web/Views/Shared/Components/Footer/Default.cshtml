@@ -1,7 +1,11 @@
 ﻿@model FooterModel
+
 @using Nop.Core
 @using Nop.Core.Domain.Tax
-@inject IWorkContext workContext;
+@using Nop.Core.Domain.Topics
+
+@inject IWorkContext workContext
+
 <div class="footer">
     <div class="footer-upper">
         <div class="footer-block information">
@@ -15,7 +19,7 @@
                 }
                 @foreach (var topic in Model.Topics.Where(x => x.IncludeInFooterColumn1).ToList())
                 {
-                    <li><a href="@Url.RouteUrl("Topic", new { SeName = topic.SeName })">@topic.Name</a></li>
+                    <li><a href="@(Url.RouteUrl<Topic>(new { SeName = topic.SeName }))">@topic.Name</a></li>
                 }
                 @if (Model.DisplayContactUsFooterItem)
                 {
@@ -28,7 +32,7 @@
                 <strong>@T("Footer.CustomerService")</strong>
             </div>
             <ul class="list">
-                @if (Model.DisplayProductSearchFooterItem)
+                @if (Model.SearchEnabled && Model.DisplayProductSearchFooterItem)
                 {
                     <li><a href="@Url.RouteUrl("ProductSearch")">@T("Search")</a> </li>
                 }
@@ -58,7 +62,7 @@
                 }
                 @foreach (var topic in Model.Topics.Where(x => x.IncludeInFooterColumn2).ToList())
                 {
-                    <li><a href="@Url.RouteUrl("Topic", new {SeName = topic.SeName})">@topic.Name</a></li>
+                    <li><a href="@(Url.RouteUrl<Topic>(new { SeName = topic.SeName }))">@topic.Name</a></li>
                 }
                 @if (Model.AllowCustomersToCheckGiftCardBalance)
                 {
@@ -97,7 +101,7 @@
                 }
                 @foreach (var topic in Model.Topics.Where(x => x.IncludeInFooterColumn3).ToList())
                 {
-                    <li><a href="@Url.RouteUrl("Topic", new {SeName = topic.SeName})">@topic.Name</a></li>
+                    <li><a href="@(Url.RouteUrl<Topic>(new { SeName = topic.SeName }))">@topic.Name</a></li>
                 }
             </ul>
         </div>
@@ -106,9 +110,9 @@
                 <div class="title">
                     <strong>@T("Footer.FollowUs")</strong>
                 </div>
-                @await Component.InvokeAsync("SocialButtons")
+                @await Component.InvokeAsync(typeof(SocialButtonsViewComponent))
             </div>
-            @await Component.InvokeAsync("NewsletterBox")
+            @await Component.InvokeAsync(typeof(NewsletterBoxViewComponent))
         </div>
     </div>
     <div class="footer-lower">
@@ -116,9 +120,9 @@
             <span class="footer-disclaimer">@T("Content.CopyrightNotice", DateTime.Now.Year, Model.StoreName)</span>
             @if (Model.DisplayTaxShippingInfoFooter)
             {
-                var inclTax = workContext.TaxDisplayType == TaxDisplayType.IncludingTax;
+                var inclTax = await workContext.GetTaxDisplayTypeAsync() == TaxDisplayType.IncludingTax;
                 <span class="footer-tax-shipping">
-                    @T(inclTax ? "Footer.TaxShipping.InclTax" : "Footer.TaxShipping.ExclTax", Url.RouteUrl("Topic", new {SeName = Html.GetTopicSeName("shippinginfo")}))
+                    @T(inclTax ? "Footer.TaxShipping.InclTax" : "Footer.TaxShipping.ExclTax", Url.RouteTopicUrl("shippinginfo"))
                 </span>
             }
         </div>
@@ -127,15 +131,15 @@
             <div class="footer-powered-by">
                 @*Would you like to remove the "Powered by nopCommerce" link in the bottom of the footer?
                     Please find more info at https://www.nopcommerce.com/nopcommerce-copyright-removal-key*@
-                Powered by <a href="https://www.nopcommerce.com/">nopCommerce</a>
+                Powered by <a href="@(OfficialSite.Main)" target="_blank" @(Model.IsHomePage ? string.Empty : "rel=nofollow")>nopCommerce</a>
             </div>
         }
-        @await Component.InvokeAsync("StoreThemeSelector")
+        @await Component.InvokeAsync(typeof(StoreThemeSelectorViewComponent))
     </div>
-    @await Component.InvokeAsync("Widget", new { widgetZone = PublicWidgetZones.Footer })
+    @await Component.InvokeAsync(typeof(WidgetViewComponent), new { widgetZone = PublicWidgetZones.Footer, additionalData = Model })
 </div>
 <script asp-location="Footer">
-    $(document).ready(function () {
+    $(function() {
         $('.footer-block .title').on('click', function () {
             var e = window, a = 'inner';
             if (!('innerWidth' in window)) {
@@ -150,7 +154,7 @@
     });
 </script>
 <script asp-location="Footer">
-    $(document).ready(function () {
+    $(function() {
         $('.block .title').on('click', function () {
             var e = window, a = 'inner';
             if (!('innerWidth' in window)) {

@@ -1,26 +1,30 @@
-﻿using Nop.Core.Domain.Catalog;
+﻿using Nop.Core.Caching;
+using Nop.Core.Domain.Catalog;
 using Nop.Services.Caching;
 
-namespace Nop.Services.Catalog.Caching
+namespace Nop.Services.Catalog.Caching;
+
+/// <summary>
+/// Represents a product attribute cache event consumer
+/// </summary>
+public partial class ProductAttributeCacheEventConsumer : CacheEventConsumer<ProductAttribute>
 {
     /// <summary>
-    /// Represents a product attribute cache event consumer
+    /// Clear cache data
     /// </summary>
-    public partial class ProductAttributeCacheEventConsumer : CacheEventConsumer<ProductAttribute>
+    /// <param name="entity">Entity</param>
+    /// <param name="entityEventType">Entity event type</param>
+    /// <returns>A task that represents the asynchronous operation</returns>
+    protected override async Task ClearCacheAsync(ProductAttribute entity, EntityEventType entityEventType)
     {
-        /// <summary>
-        /// entity
-        /// </summary>
-        /// <param name="entity">Entity</param>
-        /// <param name="entityEventType">Entity event type</param>
-        protected override void ClearCache(ProductAttribute entity, EntityEventType entityEventType)
-        {
-            if (entityEventType != EntityEventType.Delete) 
-                return;
+        if (entityEventType == EntityEventType.Insert)
+            await RemoveAsync(NopCatalogDefaults.ProductAttributeValuesByAttributeCacheKey, entity);
 
-            RemoveByPrefix(NopCatalogDefaults.ProductAttributeMappingsPrefixCacheKey);
-            RemoveByPrefix(NopCatalogDefaults.ProductAttributeValuesAllPrefixCacheKey);
-            RemoveByPrefix(NopCatalogDefaults.ProductAttributeCombinationsAllPrefixCacheKey);
+        if (entityEventType == EntityEventType.Delete)
+        {
+            await RemoveByPrefixAsync(NopCatalogDefaults.ProductAttributeMappingsByProductPrefix);
+            await RemoveByPrefixAsync(NopEntityCacheDefaults<ProductAttributeMapping>.ByIdPrefix);
         }
+        await base.ClearCacheAsync(entity, entityEventType);
     }
 }

@@ -1,22 +1,21 @@
 ﻿using Nop.Core.Domain.Orders;
+using Nop.Services.Attributes;
 using Nop.Services.Caching;
 
-namespace Nop.Services.Orders.Caching
+namespace Nop.Services.Orders.Caching;
+
+/// <summary>
+/// Represents a checkout attribute cache event consumer
+/// </summary>
+public partial class CheckoutAttributeCacheEventConsumer : CacheEventConsumer<CheckoutAttribute>
 {
     /// <summary>
-    /// Represents a checkout attribute cache event consumer
+    /// Clear cache data
     /// </summary>
-    public partial class CheckoutAttributeCacheEventConsumer : CacheEventConsumer<CheckoutAttribute>
+    /// <param name="entity">Entity</param>
+    /// <returns>A task that represents the asynchronous operation</returns>
+    protected override async Task ClearCacheAsync(CheckoutAttribute entity)
     {
-        /// <summary>
-        /// Clear cache data
-        /// </summary>
-        /// <param name="entity">Entity</param>
-        protected override void ClearCache(CheckoutAttribute entity)
-        {
-            RemoveByPrefix(NopOrderDefaults.CheckoutAttributesAllPrefixCacheKey);
-            var cacheKey = _cacheKeyService.PrepareKey(NopOrderDefaults.CheckoutAttributeValuesAllCacheKey, entity);
-            Remove(cacheKey);
-        }
+        await RemoveAsync(NopAttributeDefaults.AttributeValuesByAttributeCacheKey, nameof(CheckoutAttribute), entity);
     }
 }

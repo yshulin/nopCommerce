@@ -1,22 +1,27 @@
 ﻿@model Nop.Web.Models.Boards.SearchModel
 @using Nop.Core.Domain.Forums
+@using Nop.Services.Localization
+@using Nop.Web.Factories
+@using Nop.Web.Framework.TagHelpers.Shared
+@using Microsoft.AspNetCore.Mvc.TagHelpers
+@inject ILocalizationService localizationService
 @{
     Layout = "_ColumnsOne";
 
     //title
-    Html.AddTitleParts(T("Forum.PageTitle.Search").Text);
+    NopHtml.AddTitleParts(T("Forum.PageTitle.Search").Text);
     //page class
-    Html.AppendPageCssClassParts("html-forum-search-page");
+    NopHtml.AppendPageCssClassParts("html-forum-search-page");
 }
 <script asp-location="Footer">
-    $(document).ready(function () {
+    $(function() {
         toggleAdvancedSearch();
-        $('#adv').on('click', function () {
+        $('#advs').on('click', function () {
             toggleAdvancedSearch();
         });
     });
     function toggleAdvancedSearch() {
-        if ($('#adv').is(':checked')) {
+        if ($('#advs').is(':checked')) {
             $('#advanced-search').show();
         }
         else {
@@ -24,13 +29,13 @@
         }
     }
 </script>
-@await Component.InvokeAsync("ForumBreadcrumb")
+@await Component.InvokeAsync(typeof(ForumBreadcrumbViewComponent))
 <div class="page forum-search-page">
     <div class="page-title">
         <h1>@T("Forum.Search")</h1>
     </div>
     <div class="page-body">
-        @await Component.InvokeAsync("Widget", new { widgetZone = PublicWidgetZones.BoardsSearchBeforeSearchform })
+        @await Component.InvokeAsync(typeof(WidgetViewComponent), new { widgetZone = PublicWidgetZones.BoardsSearchBeforeSearchform, additionalData = Model })
         <div class="search-input">
             <form asp-route="Search" method="get">
                 <div class="fieldset">
@@ -41,8 +46,8 @@
                                 <input type="text" name="searchterms" id="searchterms" class="forum-search-text" value="@Model.SearchTerms" />
                             </div>
                             <div class="inputs reversed">
-                                <input @(Model.ShowAdvancedSearch ? "checked=\"checked\"" : "") id="adv" name="adv" type="checkbox" value="true">
-                                <label for="adv">@T("Forum.Search.AdvancedSearch")</label>
+                                <input @(Model.ShowAdvancedSearch ? "checked=\"checked\"" : "") id="advs" name="advs" type="checkbox" value="true">
+                                <label for="advs">@T("Forum.Search.AdvancedSearch")</label>
                             </div>
                         </div>
                         <div class="advanced-search" id="advanced-search" style="display: none;">
@@ -62,42 +67,42 @@
                     </div>
                 </div>
                 <div class="buttons">
-                    <input type="submit" class="button-1 forum-search-button" value="@T("Forum.SearchButton")" />
+                    <button type="submit" class="button-1 forum-search-button">@T("Forum.SearchButton")</button>
                 </div>
             </form>
         </div>
-        @await Component.InvokeAsync("Widget", new { widgetZone = PublicWidgetZones.BoardsSearchAfterSearchform })
+        @await Component.InvokeAsync(typeof(WidgetViewComponent), new { widgetZone = PublicWidgetZones.BoardsSearchAfterSearchform, additionalData = Model })
         <div class="search-error">
             @Model.Error
         </div>
         <div class="search-results">
             @{
                 var searchterms = Model.SearchTerms;
-                string adv = null;
+                string advs = null;
                 string within = null;
                 string limitDays = null;
                 string forumId = null;
 
                 if (Model.ShowAdvancedSearch)
                 {
-                    adv = "true";
+                    advs = "true";
                     within = Model.WithinSelected.ToString();
                     limitDays = Model.LimitDaysSelected.ToString();
                     forumId = Model.ForumIdSelected.ToString();
                 }
 
-                var pager = Html.Pager(new PagerModel
+                var pager = await Html.PagerAsync(new PagerModel(localizationService)
                 {
                     PageSize = Model.TopicPageSize,
                     TotalRecords = Model.TopicTotalRecords,
                     PageIndex = Model.TopicPageIndex,
                     ShowTotalSummary = false,
                     RouteActionName = "Search",
-                    RouteValues = new ForumSearchRouteValues { adv = adv, searchterms = searchterms, forumId = forumId, within = within, limitDays = limitDays },
+                    RouteValues = new ForumModelFactory.ForumSearchRouteValues { Advs = advs, Searchterms = searchterms, ForumId = forumId, Within = within, LimitDays = limitDays },
                 });
             }
-            @await Component.InvokeAsync("Widget", new { widgetZone = PublicWidgetZones.BoardsSearchBeforeResults })
-            @if (!string.IsNullOrEmpty(pager.ToHtmlString()))
+            @await Component.InvokeAsync(typeof(WidgetViewComponent), new { widgetZone = PublicWidgetZones.BoardsSearchBeforeResults, additionalData = Model })
+            @if (!string.IsNullOrEmpty(await pager.RenderHtmlContentAsync()))
             {
                 <div class="pager upper">
                     @pager
@@ -183,7 +188,7 @@
                                             @if (topic.NumPosts > Model.PostsPageSize)
                                             {
                                                 <div class="topic-pager">
-                                                    @Html.ForumTopicSmallPager(topic)
+                                                    @await Html.ForumTopicSmallPagerAsync(topic)
                                                 </div>
                                             }
                                             <div class="topic-starter">
@@ -214,7 +219,7 @@
                                             </td>
                                         }
                                         <td class="latest-post">
-                                            @await Component.InvokeAsync("ForumLastPost", new { forumPostId = topic.LastPostId, showTopic = false })
+                                            @await Component.InvokeAsync(typeof(ForumLastPostViewComponent), new { forumPostId = topic.LastPostId, showTopic = false })
                                         </td>
                                     </tr>
                                 }
@@ -223,13 +228,13 @@
                     </div>
                 }
             </div>
-            @if (!string.IsNullOrEmpty(pager.ToHtmlString()))
+            @if (!string.IsNullOrEmpty(await pager.RenderHtmlContentAsync()))
             {
                 <div class="pager lower">
                     @pager
                 </div>
             }
-            @await Component.InvokeAsync("Widget", new { widgetZone = PublicWidgetZones.BoardsSearchAfterResults })
+            @await Component.InvokeAsync(typeof(WidgetViewComponent), new { widgetZone = PublicWidgetZones.BoardsSearchAfterResults, additionalData = Model })
         </div>
     </div>
 </div>

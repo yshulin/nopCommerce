@@ -1,15 +1,13 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Globalization;
-using System.IO;
-using System.Linq;
+﻿using System.Globalization;
 using System.Text;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Nop.Core;
 using Nop.Core.Domain.Catalog;
+using Nop.Core.Domain.Common;
 using Nop.Core.Domain.Orders;
 using Nop.Core.Domain.Shipping;
+using Nop.Core.Events;
+using Nop.Services.Attributes;
 using Nop.Services.Catalog;
 using Nop.Services.Common;
 using Nop.Services.Customers;
@@ -17,7 +15,6 @@ using Nop.Services.ExportImport;
 using Nop.Services.Helpers;
 using Nop.Services.Localization;
 using Nop.Services.Logging;
-using Nop.Services.Media;
 using Nop.Services.Messages;
 using Nop.Services.Orders;
 using Nop.Services.Payments;
@@ -31,2795 +28,2690 @@ using Nop.Web.Framework.Controllers;
 using Nop.Web.Framework.Mvc;
 using Nop.Web.Framework.Mvc.Filters;
 
-namespace Nop.Web.Areas.Admin.Controllers
+namespace Nop.Web.Areas.Admin.Controllers;
+
+public partial class OrderController : BaseAdminController
 {
-    public partial class OrderController : BaseAdminController
+    #region Fields
+
+    protected readonly IAddressService _addressService;
+    protected readonly IAttributeParser<AddressAttribute, AddressAttributeValue> _addressAttributeParser;
+    protected readonly ICustomerActivityService _customerActivityService;
+    protected readonly ICustomerService _customerService;
+    protected readonly IDateTimeHelper _dateTimeHelper;
+    protected readonly IEncryptionService _encryptionService;
+    protected readonly IEventPublisher _eventPublisher;
+    protected readonly IExportManager _exportManager;
+    protected readonly IGiftCardService _giftCardService;
+    protected readonly IImportManager _importManager;
+    protected readonly ILocalizationService _localizationService;
+    protected readonly INotificationService _notificationService;
+    protected readonly IOrderModelFactory _orderModelFactory;
+    protected readonly IOrderProcessingService _orderProcessingService;
+    protected readonly IOrderService _orderService;
+    protected readonly IPaymentService _paymentService;
+    protected readonly IPdfService _pdfService;
+    protected readonly IPermissionService _permissionService;
+    protected readonly IPriceCalculationService _priceCalculationService;
+    protected readonly IProductAttributeFormatter _productAttributeFormatter;
+    protected readonly IProductAttributeParser _productAttributeParser;
+    protected readonly IProductAttributeService _productAttributeService;
+    protected readonly IProductService _productService;
+    protected readonly IShipmentService _shipmentService;
+    protected readonly IShippingService _shippingService;
+    protected readonly IShoppingCartService _shoppingCartService;
+    protected readonly IStoreContext _storeContext;
+    protected readonly IWorkContext _workContext;
+    protected readonly IWorkflowMessageService _workflowMessageService;
+    protected readonly OrderSettings _orderSettings;
+    private static readonly char[] _separator = [','];
+
+    #endregion
+
+    #region Ctor
+
+    public OrderController(IAddressService addressService,
+        IAttributeParser<AddressAttribute, AddressAttributeValue> addressAttributeParser,
+        ICustomerActivityService customerActivityService,
+        ICustomerService customerService,
+        IDateTimeHelper dateTimeHelper,
+        IEncryptionService encryptionService,
+        IEventPublisher eventPublisher,
+        IExportManager exportManager,
+        IGiftCardService giftCardService,
+        IImportManager importManager,
+        ILocalizationService localizationService,
+        INotificationService notificationService,
+        IOrderModelFactory orderModelFactory,
+        IOrderProcessingService orderProcessingService,
+        IOrderService orderService,
+        IPaymentService paymentService,
+        IPdfService pdfService,
+        IPermissionService permissionService,
+        IPriceCalculationService priceCalculationService,
+        IProductAttributeFormatter productAttributeFormatter,
+        IProductAttributeParser productAttributeParser,
+        IProductAttributeService productAttributeService,
+        IProductService productService,
+        IShipmentService shipmentService,
+        IShippingService shippingService,
+        IShoppingCartService shoppingCartService,
+        IStoreContext storeContext,
+        IWorkContext workContext,
+        IWorkflowMessageService workflowMessageService,
+        OrderSettings orderSettings)
     {
-        #region Fields
+        _addressService = addressService;
+        _addressAttributeParser = addressAttributeParser;
+        _customerActivityService = customerActivityService;
+        _customerService = customerService;
+        _dateTimeHelper = dateTimeHelper;
+        _encryptionService = encryptionService;
+        _eventPublisher = eventPublisher;
+        _exportManager = exportManager;
+        _giftCardService = giftCardService;
+        _importManager = importManager;
+        _localizationService = localizationService;
+        _notificationService = notificationService;
+        _orderModelFactory = orderModelFactory;
+        _orderProcessingService = orderProcessingService;
+        _orderService = orderService;
+        _paymentService = paymentService;
+        _pdfService = pdfService;
+        _permissionService = permissionService;
+        _priceCalculationService = priceCalculationService;
+        _productAttributeFormatter = productAttributeFormatter;
+        _productAttributeParser = productAttributeParser;
+        _productAttributeService = productAttributeService;
+        _productService = productService;
+        _shipmentService = shipmentService;
+        _shippingService = shippingService;
+        _shoppingCartService = shoppingCartService;
+        _storeContext = storeContext;
+        _workContext = workContext;
+        _workflowMessageService = workflowMessageService;
+        _orderSettings = orderSettings;
+    }
 
-        private readonly IAddressAttributeParser _addressAttributeParser;
-        private readonly IAddressService _addressService;
-        private readonly ICustomerActivityService _customerActivityService;
-        private readonly ICustomerService _customerService;
-        private readonly IDateTimeHelper _dateTimeHelper;
-        private readonly IDownloadService _downloadService;
-        private readonly IEncryptionService _encryptionService;
-        private readonly IExportManager _exportManager;
-        private readonly IGiftCardService _giftCardService;
-        private readonly ILocalizationService _localizationService;
-        private readonly INotificationService _notificationService;
-        private readonly IOrderModelFactory _orderModelFactory;
-        private readonly IOrderProcessingService _orderProcessingService;
-        private readonly IOrderService _orderService;
-        private readonly IPaymentService _paymentService;
-        private readonly IPdfService _pdfService;
-        private readonly IPermissionService _permissionService;
-        private readonly IPriceCalculationService _priceCalculationService;
-        private readonly IProductAttributeFormatter _productAttributeFormatter;
-        private readonly IProductAttributeParser _productAttributeParser;
-        private readonly IProductAttributeService _productAttributeService;
-        private readonly IProductService _productService;
-        private readonly IShipmentService _shipmentService;
-        private readonly IShippingService _shippingService;
-        private readonly IShoppingCartService _shoppingCartService;
-        private readonly IWorkContext _workContext;
-        private readonly IWorkflowMessageService _workflowMessageService;
-        private readonly OrderSettings _orderSettings;
+    #endregion
 
-        #endregion
+    #region Utilities
 
-        #region Ctor
+    protected virtual async ValueTask<bool> HasAccessToOrderAsync(Order order)
+    {
+        return order != null && await HasAccessToOrderAsync(order.Id);
+    }
 
-        public OrderController(IAddressAttributeParser addressAttributeParser,
-            IAddressService addressService,
-            ICustomerActivityService customerActivityService,
-            ICustomerService customerService,
-            IDateTimeHelper dateTimeHelper,
-            IDownloadService downloadService,
-            IEncryptionService encryptionService,
-            IExportManager exportManager,
-            IGiftCardService giftCardService,
-            ILocalizationService localizationService,
-            INotificationService notificationService,
-            IOrderModelFactory orderModelFactory,
-            IOrderProcessingService orderProcessingService,
-            IOrderService orderService,
-            IPaymentService paymentService,
-            IPdfService pdfService,
-            IPermissionService permissionService,
-            IPriceCalculationService priceCalculationService,
-            IProductAttributeFormatter productAttributeFormatter,
-            IProductAttributeParser productAttributeParser,
-            IProductAttributeService productAttributeService,
-            IProductService productService,
-            IShipmentService shipmentService,
-            IShippingService shippingService,
-            IShoppingCartService shoppingCartService,
-            IWorkContext workContext,
-            IWorkflowMessageService workflowMessageService,
-            OrderSettings orderSettings)
+    protected virtual async Task<bool> HasAccessToOrderAsync(int orderId)
+    {
+        if (orderId == 0)
+            return false;
+
+        var currentVendor = await _workContext.GetCurrentVendorAsync();
+        if (currentVendor == null)
+            //not a vendor; has access
+            return true;
+
+        var vendorId = currentVendor.Id;
+        var hasVendorProducts = (await _orderService.GetOrderItemsAsync(orderId, vendorId: vendorId)).Any();
+
+        return hasVendorProducts;
+    }
+
+    protected virtual async ValueTask<bool> HasAccessToProductAsync(OrderItem orderItem)
+    {
+        if (orderItem == null || orderItem.ProductId == 0)
+            return false;
+
+        var currentVendor = await _workContext.GetCurrentVendorAsync();
+        if (currentVendor == null)
+            //not a vendor; has access
+            return true;
+
+        var vendorId = currentVendor.Id;
+
+        return (await _productService.GetProductByIdAsync(orderItem.ProductId))?.VendorId == vendorId;
+    }
+
+    protected virtual async ValueTask<bool> HasAccessToShipmentAsync(Shipment shipment)
+    {
+        ArgumentNullException.ThrowIfNull(shipment);
+
+        if (await _workContext.GetCurrentVendorAsync() == null)
+            //not a vendor; has access
+            return true;
+
+        return await HasAccessToOrderAsync(shipment.OrderId);
+    }
+
+    protected virtual async Task LogEditOrderAsync(int orderId)
+    {
+        var order = await _orderService.GetOrderByIdAsync(orderId);
+
+        await _customerActivityService.InsertActivityAsync("EditOrder",
+            string.Format(await _localizationService.GetResourceAsync("ActivityLog.EditOrder"), order.CustomOrderNumber), order);
+    }
+
+    #endregion
+
+    #region Order list
+
+    public virtual IActionResult Index()
+    {
+        return RedirectToAction("List");
+    }
+
+    [CheckPermission(StandardPermission.Orders.ORDERS_VIEW)]
+    public virtual async Task<IActionResult> List(List<int> orderStatuses = null, List<int> paymentStatuses = null, List<int> shippingStatuses = null)
+    {
+        //prepare model
+        var model = await _orderModelFactory.PrepareOrderSearchModelAsync(new OrderSearchModel
         {
-            _addressAttributeParser = addressAttributeParser;
-            _addressService = addressService;
-            _customerActivityService = customerActivityService;
-            _customerService = customerService;
-            _dateTimeHelper = dateTimeHelper;
-            _downloadService = downloadService;
-            _encryptionService = encryptionService;
-            _exportManager = exportManager;
-            _giftCardService = giftCardService;
-            _localizationService = localizationService;
-            _notificationService = notificationService;
-            _orderModelFactory = orderModelFactory;
-            _orderProcessingService = orderProcessingService;
-            _orderService = orderService;
-            _paymentService = paymentService;
-            _pdfService = pdfService;
-            _permissionService = permissionService;
-            _priceCalculationService = priceCalculationService;
-            _productAttributeFormatter = productAttributeFormatter;
-            _productAttributeParser = productAttributeParser;
-            _productAttributeService = productAttributeService;
-            _productService = productService;
-            _shipmentService = shipmentService;
-            _shippingService = shippingService;
-            _shoppingCartService = shoppingCartService;
-            _workContext = workContext;
-            _workflowMessageService = workflowMessageService;
-            _orderSettings = orderSettings;
+            OrderStatusIds = orderStatuses,
+            PaymentStatusIds = paymentStatuses,
+            ShippingStatusIds = shippingStatuses
+        });
+
+        return View(model);
+    }
+
+    [HttpPost]
+    [CheckPermission(StandardPermission.Orders.ORDERS_VIEW)]
+    public virtual async Task<IActionResult> OrderList(OrderSearchModel searchModel)
+    {
+        //prepare model
+        var model = await _orderModelFactory.PrepareOrderListModelAsync(searchModel);
+
+        return Json(model);
+    }
+
+    [HttpPost]
+    [CheckPermission(StandardPermission.Orders.ORDERS_VIEW)]
+    public virtual async Task<IActionResult> ReportAggregates(OrderSearchModel searchModel)
+    {
+        //prepare model
+        var model = await _orderModelFactory.PrepareOrderAggregatorModelAsync(searchModel);
+
+        return Json(model);
+    }
+
+    [HttpPost, ActionName("List")]
+    [FormValueRequired("go-to-order-by-number")]
+    [CheckPermission(StandardPermission.Orders.ORDERS_VIEW)]
+    public virtual async Task<IActionResult> GoToOrderId(OrderSearchModel model)
+    {
+        var order = await _orderService.GetOrderByCustomOrderNumberAsync(model.GoDirectlyToCustomOrderNumber);
+
+        if (order == null)
+            return await List();
+
+        return RedirectToAction("Edit", new { id = order.Id });
+    }
+
+    #endregion
+
+    #region Export / Import
+
+    [HttpPost, ActionName("ExportXml")]
+    [FormValueRequired("exportxml-all")]
+    [CheckPermission(StandardPermission.Orders.ORDERS_IMPORT_EXPORT)]
+    public virtual async Task<IActionResult> ExportXmlAll(OrderSearchModel model)
+    {
+        var startDateValue = model.StartDate == null ? null
+            : (DateTime?)_dateTimeHelper.ConvertToUtcTime(model.StartDate.Value, await _dateTimeHelper.GetCurrentTimeZoneAsync());
+
+        var endDateValue = model.EndDate == null ? null
+            : (DateTime?)_dateTimeHelper.ConvertToUtcTime(model.EndDate.Value, await _dateTimeHelper.GetCurrentTimeZoneAsync()).AddDays(1);
+
+        //a vendor should have access only to his products
+        var currentVendor = await _workContext.GetCurrentVendorAsync();
+        if (currentVendor != null)
+        {
+            model.VendorId = currentVendor.Id;
         }
 
-        #endregion
+        var orderStatusIds = model.OrderStatusIds != null && !model.OrderStatusIds.Contains(0)
+            ? model.OrderStatusIds.ToList()
+            : null;
+        var paymentStatusIds = model.PaymentStatusIds != null && !model.PaymentStatusIds.Contains(0)
+            ? model.PaymentStatusIds.ToList()
+            : null;
+        var shippingStatusIds = model.ShippingStatusIds != null && !model.ShippingStatusIds.Contains(0)
+            ? model.ShippingStatusIds.ToList()
+            : null;
 
-        #region Utilities
+        var filterByProductId = 0;
+        var product = await _productService.GetProductByIdAsync(model.ProductId);
+        if (product != null && (currentVendor == null || product.VendorId == currentVendor.Id))
+            filterByProductId = model.ProductId;
 
-        protected virtual bool HasAccessToOrder(Order order)
+        //load orders
+        var orders = await _orderService.SearchOrdersAsync(storeId: model.StoreId,
+            vendorId: model.VendorId,
+            productId: filterByProductId,
+            warehouseId: model.WarehouseId,
+            paymentMethodSystemName: model.PaymentMethodSystemName,
+            createdFromUtc: startDateValue,
+            createdToUtc: endDateValue,
+            osIds: orderStatusIds,
+            psIds: paymentStatusIds,
+            ssIds: shippingStatusIds,
+            billingPhone: model.BillingPhone,
+            billingEmail: model.BillingEmail,
+            billingLastName: model.BillingLastName,
+            billingCountryId: model.BillingCountryId,
+            orderNotes: model.OrderNotes);
+
+        //ensure that we at least one order selected
+        if (!orders.Any())
         {
-            return order != null && HasAccessToOrder(order.Id);
-        }
-
-        protected virtual bool HasAccessToOrder(int orderId)
-        {
-            if (orderId == 0)
-                return false;
-
-            if (_workContext.CurrentVendor == null)
-                //not a vendor; has access
-                return true;
-
-            var vendorId = _workContext.CurrentVendor.Id;
-            var hasVendorProducts = _orderService.GetOrderItems(orderId, vendorId: vendorId).Any();
-
-            return hasVendorProducts;
-        }
-        
-        protected virtual bool HasAccessToProduct(OrderItem orderItem)
-        {
-            if (orderItem == null || orderItem.ProductId == 0)
-                return false;
-
-            if (_workContext.CurrentVendor == null)
-                //not a vendor; has access
-                return true;
-
-            var vendorId = _workContext.CurrentVendor.Id;
-
-            return _productService.GetProductById(orderItem.ProductId)?.VendorId == vendorId;
-        }
-        
-        protected virtual bool HasAccessToShipment(Shipment shipment)
-        {
-            if (shipment == null)
-                throw new ArgumentNullException(nameof(shipment));
-
-            if (_workContext.CurrentVendor == null)
-                //not a vendor; has access
-                return true;
-
-            return HasAccessToOrder(shipment.OrderId);
-        }
-
-        protected virtual void LogEditOrder(int orderId)
-        {
-            var order = _orderService.GetOrderById(orderId);
-
-            _customerActivityService.InsertActivity("EditOrder",
-                string.Format(_localizationService.GetResource("ActivityLog.EditOrder"), order.CustomOrderNumber), order);
-        }
-
-        protected virtual string AddGiftCards(IFormCollection form, Product product, string attributesXml,
-           out string recipientName, out string recipientEmail, out string senderName, out string senderEmail,
-           out string giftCardMessage)
-        {
-            recipientName = string.Empty;
-            recipientEmail = string.Empty;
-            senderName = string.Empty;
-            senderEmail = string.Empty;
-            giftCardMessage = string.Empty;
-
-            if (!product.IsGiftCard)
-                return attributesXml;
-
-            foreach (var formKey in form.Keys)
-            {
-                if (formKey.Equals("giftcard.RecipientName", StringComparison.InvariantCultureIgnoreCase))
-                {
-                    recipientName = form[formKey];
-                    continue;
-                }
-
-                if (formKey.Equals("giftcard.RecipientEmail", StringComparison.InvariantCultureIgnoreCase))
-                {
-                    recipientEmail = form[formKey];
-                    continue;
-                }
-
-                if (formKey.Equals("giftcard.SenderName", StringComparison.InvariantCultureIgnoreCase))
-                {
-                    senderName = form[formKey];
-                    continue;
-                }
-
-                if (formKey.Equals("giftcard.SenderEmail", StringComparison.InvariantCultureIgnoreCase))
-                {
-                    senderEmail = form[formKey];
-                    continue;
-                }
-
-                if (formKey.Equals("giftcard.Message", StringComparison.InvariantCultureIgnoreCase))
-                {
-                    giftCardMessage = form[formKey];
-                }
-            }
-
-            attributesXml = _productAttributeParser.AddGiftCardAttribute(attributesXml,
-                recipientName, recipientEmail, senderName, senderEmail, giftCardMessage);
-
-            return attributesXml;
-        }
-
-        #endregion
-
-        #region Order list
-
-        public virtual IActionResult Index()
-        {
+            _notificationService.ErrorNotification(await _localizationService.GetResourceAsync("Admin.Orders.NoOrders"));
             return RedirectToAction("List");
         }
 
-        public virtual IActionResult List(List<int> orderStatuses = null, List<int> paymentStatuses = null, List<int> shippingStatuses = null)
+        try
         {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageOrders))
-                return AccessDeniedView();
+            var xml = await _exportManager.ExportOrdersToXmlAsync(orders);
+            return File(Encoding.UTF8.GetBytes(xml), MimeTypes.ApplicationXml, "orders.xml");
+        }
+        catch (Exception exc)
+        {
+            await _notificationService.ErrorNotificationAsync(exc);
+            return RedirectToAction("List");
+        }
+    }
 
-            //prepare model
-            var model = _orderModelFactory.PrepareOrderSearchModel(new OrderSearchModel
-            {
-                OrderStatusIds = orderStatuses,
-                PaymentStatusIds = paymentStatuses,
-                ShippingStatusIds = shippingStatuses
-            });
-
-            return View(model);
+    [HttpPost]
+    [CheckPermission(StandardPermission.Orders.ORDERS_IMPORT_EXPORT)]
+    public virtual async Task<IActionResult> ExportXmlSelected(string selectedIds)
+    {
+        var orders = new List<Order>();
+        if (selectedIds != null)
+        {
+            var ids = selectedIds
+                .Split(_separator, StringSplitOptions.RemoveEmptyEntries)
+                .Select(x => Convert.ToInt32(x))
+                .ToArray();
+            orders.AddRange(await (await _orderService.GetOrdersByIdsAsync(ids))
+                .WhereAwait(HasAccessToOrderAsync).ToListAsync());
         }
 
-        [HttpPost]
-        public virtual IActionResult OrderList(OrderSearchModel searchModel)
+        try
         {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageOrders))
-                return AccessDeniedDataTablesJson();
+            var xml = await _exportManager.ExportOrdersToXmlAsync(orders);
+            return File(Encoding.UTF8.GetBytes(xml), MimeTypes.ApplicationXml, "orders.xml");
+        }
+        catch (Exception exc)
+        {
+            await _notificationService.ErrorNotificationAsync(exc);
+            return RedirectToAction("List");
+        }
+    }
 
-            //prepare model
-            var model = _orderModelFactory.PrepareOrderListModel(searchModel);
+    [HttpPost, ActionName("ExportExcel")]
+    [FormValueRequired("exportexcel-all")]
+    [CheckPermission(StandardPermission.Orders.ORDERS_IMPORT_EXPORT)]
+    public virtual async Task<IActionResult> ExportExcelAll(OrderSearchModel model)
+    {
+        var startDateValue = model.StartDate == null ? null
+            : (DateTime?)_dateTimeHelper.ConvertToUtcTime(model.StartDate.Value, await _dateTimeHelper.GetCurrentTimeZoneAsync());
 
-            return Json(model);
+        var endDateValue = model.EndDate == null ? null
+            : (DateTime?)_dateTimeHelper.ConvertToUtcTime(model.EndDate.Value, await _dateTimeHelper.GetCurrentTimeZoneAsync()).AddDays(1);
+
+        //a vendor should have access only to his products
+        var currentVendor = await _workContext.GetCurrentVendorAsync();
+        if (currentVendor != null)
+        {
+            model.VendorId = currentVendor.Id;
         }
 
-        [HttpPost]
-        public virtual IActionResult ReportAggregates(OrderSearchModel searchModel)
+        var orderStatusIds = model.OrderStatusIds != null && !model.OrderStatusIds.Contains(0)
+            ? model.OrderStatusIds.ToList()
+            : null;
+        var paymentStatusIds = model.PaymentStatusIds != null && !model.PaymentStatusIds.Contains(0)
+            ? model.PaymentStatusIds.ToList()
+            : null;
+        var shippingStatusIds = model.ShippingStatusIds != null && !model.ShippingStatusIds.Contains(0)
+            ? model.ShippingStatusIds.ToList()
+            : null;
+
+        var filterByProductId = 0;
+        var product = await _productService.GetProductByIdAsync(model.ProductId);
+        if (product != null && (currentVendor == null || product.VendorId == currentVendor.Id))
+            filterByProductId = model.ProductId;
+
+        //load orders
+        var orders = await _orderService.SearchOrdersAsync(storeId: model.StoreId,
+            vendorId: model.VendorId,
+            productId: filterByProductId,
+            warehouseId: model.WarehouseId,
+            paymentMethodSystemName: model.PaymentMethodSystemName,
+            createdFromUtc: startDateValue,
+            createdToUtc: endDateValue,
+            osIds: orderStatusIds,
+            psIds: paymentStatusIds,
+            ssIds: shippingStatusIds,
+            billingPhone: model.BillingPhone,
+            billingEmail: model.BillingEmail,
+            billingLastName: model.BillingLastName,
+            billingCountryId: model.BillingCountryId,
+            orderNotes: model.OrderNotes);
+
+        //ensure that we at least one order selected
+        if (!orders.Any())
         {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageOrders))
-                return AccessDeniedDataTablesJson();
-
-            //prepare model
-            var model = _orderModelFactory.PrepareOrderAggregatorModel(searchModel);
-
-            return Json(model);
-        }
-
-        [HttpPost, ActionName("List")]
-        [FormValueRequired("go-to-order-by-number")]
-        public virtual IActionResult GoToOrderId(OrderSearchModel model)
-        {
-            var order = _orderService.GetOrderByCustomOrderNumber(model.GoDirectlyToCustomOrderNumber);
-
-            if (order == null)
-                return List();
-
-            return RedirectToAction("Edit", "Order", new { id = order.Id });
-        }
-
-        #endregion
-
-        #region Export / Import
-
-        [HttpPost, ActionName("ExportXml")]
-        [FormValueRequired("exportxml-all")]
-        public virtual IActionResult ExportXmlAll(OrderSearchModel model)
-        {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageOrders))
-                return AccessDeniedView();
-
-            var startDateValue = model.StartDate == null ? null
-                            : (DateTime?)_dateTimeHelper.ConvertToUtcTime(model.StartDate.Value, _dateTimeHelper.CurrentTimeZone);
-
-            var endDateValue = model.EndDate == null ? null
-                            : (DateTime?)_dateTimeHelper.ConvertToUtcTime(model.EndDate.Value, _dateTimeHelper.CurrentTimeZone).AddDays(1);
-
-            //a vendor should have access only to his products
-            if (_workContext.CurrentVendor != null)
-            {
-                model.VendorId = _workContext.CurrentVendor.Id;
-            }
-
-            var orderStatusIds = model.OrderStatusIds != null && !model.OrderStatusIds.Contains(0)
-                ? model.OrderStatusIds.ToList()
-                : null;
-            var paymentStatusIds = model.PaymentStatusIds != null && !model.PaymentStatusIds.Contains(0)
-                ? model.PaymentStatusIds.ToList()
-                : null;
-            var shippingStatusIds = model.ShippingStatusIds != null && !model.ShippingStatusIds.Contains(0)
-                ? model.ShippingStatusIds.ToList()
-                : null;
-
-            var filterByProductId = 0;
-            var product = _productService.GetProductById(model.ProductId);
-            if (product != null && (_workContext.CurrentVendor == null || product.VendorId == _workContext.CurrentVendor.Id))
-                filterByProductId = model.ProductId;
-
-            //load orders
-            var orders = _orderService.SearchOrders(storeId: model.StoreId,
-                vendorId: model.VendorId,
-                productId: filterByProductId,
-                warehouseId: model.WarehouseId,
-                paymentMethodSystemName: model.PaymentMethodSystemName,
-                createdFromUtc: startDateValue,
-                createdToUtc: endDateValue,
-                osIds: orderStatusIds,
-                psIds: paymentStatusIds,
-                ssIds: shippingStatusIds,
-                billingPhone: model.BillingPhone,
-                billingEmail: model.BillingEmail,
-                billingLastName: model.BillingLastName,
-                billingCountryId: model.BillingCountryId,
-                orderNotes: model.OrderNotes);
-
-            //ensure that we at least one order selected
-            if (!orders.Any())
-            {
-                _notificationService.ErrorNotification(_localizationService.GetResource("Admin.Orders.NoOrders"));
-                return RedirectToAction("List");
-            }
-
-            try
-            {
-                var xml = _exportManager.ExportOrdersToXml(orders);
-                return File(Encoding.UTF8.GetBytes(xml), MimeTypes.ApplicationXml, "orders.xml");
-            }
-            catch (Exception exc)
-            {
-                _notificationService.ErrorNotification(exc);
-                return RedirectToAction("List");
-            }
-        }
-
-        [HttpPost]
-        public virtual IActionResult ExportXmlSelected(string selectedIds)
-        {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageOrders))
-                return AccessDeniedView();
-
-            var orders = new List<Order>();
-            if (selectedIds != null)
-            {
-                var ids = selectedIds
-                    .Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
-                    .Select(x => Convert.ToInt32(x))
-                    .ToArray();
-                orders.AddRange(_orderService.GetOrdersByIds(ids).Where(HasAccessToOrder));
-            }
-
-            try
-            {
-                var xml = _exportManager.ExportOrdersToXml(orders);
-                return File(Encoding.UTF8.GetBytes(xml), MimeTypes.ApplicationXml, "orders.xml");
-            }
-            catch (Exception exc)
-            {
-                _notificationService.ErrorNotification(exc);
-                return RedirectToAction("List");
-            }
-        }
-
-        [HttpPost, ActionName("ExportExcel")]
-        [FormValueRequired("exportexcel-all")]
-        public virtual IActionResult ExportExcelAll(OrderSearchModel model)
-        {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageOrders))
-                return AccessDeniedView();
-
-            var startDateValue = model.StartDate == null ? null
-                            : (DateTime?)_dateTimeHelper.ConvertToUtcTime(model.StartDate.Value, _dateTimeHelper.CurrentTimeZone);
-
-            var endDateValue = model.EndDate == null ? null
-                            : (DateTime?)_dateTimeHelper.ConvertToUtcTime(model.EndDate.Value, _dateTimeHelper.CurrentTimeZone).AddDays(1);
-
-            //a vendor should have access only to his products
-            if (_workContext.CurrentVendor != null)
-            {
-                model.VendorId = _workContext.CurrentVendor.Id;
-            }
-
-            var orderStatusIds = model.OrderStatusIds != null && !model.OrderStatusIds.Contains(0)
-                ? model.OrderStatusIds.ToList()
-                : null;
-            var paymentStatusIds = model.PaymentStatusIds != null && !model.PaymentStatusIds.Contains(0)
-                ? model.PaymentStatusIds.ToList()
-                : null;
-            var shippingStatusIds = model.ShippingStatusIds != null && !model.ShippingStatusIds.Contains(0)
-                ? model.ShippingStatusIds.ToList()
-                : null;
-
-            var filterByProductId = 0;
-            var product = _productService.GetProductById(model.ProductId);
-            if (product != null && (_workContext.CurrentVendor == null || product.VendorId == _workContext.CurrentVendor.Id))
-                filterByProductId = model.ProductId;
-
-            //load orders
-            var orders = _orderService.SearchOrders(storeId: model.StoreId,
-                vendorId: model.VendorId,
-                productId: filterByProductId,
-                warehouseId: model.WarehouseId,
-                paymentMethodSystemName: model.PaymentMethodSystemName,
-                createdFromUtc: startDateValue,
-                createdToUtc: endDateValue,
-                osIds: orderStatusIds,
-                psIds: paymentStatusIds,
-                ssIds: shippingStatusIds,
-                billingPhone: model.BillingPhone,
-                billingEmail: model.BillingEmail,
-                billingLastName: model.BillingLastName,
-                billingCountryId: model.BillingCountryId,
-                orderNotes: model.OrderNotes);
-
-            //ensure that we at least one order selected
-            if (!orders.Any())
-            {
-                _notificationService.ErrorNotification(_localizationService.GetResource("Admin.Orders.NoOrders"));
-                return RedirectToAction("List");
-            }
-
-            try
-            {
-                var bytes = _exportManager.ExportOrdersToXlsx(orders);
-                return File(bytes, MimeTypes.TextXlsx, "orders.xlsx");
-            }
-            catch (Exception exc)
-            {
-                _notificationService.ErrorNotification(exc);
-                return RedirectToAction("List");
-            }
-        }
-
-        [HttpPost]
-        public virtual IActionResult ExportExcelSelected(string selectedIds)
-        {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageOrders))
-                return AccessDeniedView();
-
-            var orders = new List<Order>();
-            if (selectedIds != null)
-            {
-                var ids = selectedIds
-                    .Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
-                    .Select(x => Convert.ToInt32(x))
-                    .ToArray();
-                orders.AddRange(_orderService.GetOrdersByIds(ids).Where(HasAccessToOrder));
-            }
-
-            try
-            {
-                var bytes = _exportManager.ExportOrdersToXlsx(orders);
-                return File(bytes, MimeTypes.TextXlsx, "orders.xlsx");
-            }
-            catch (Exception exc)
-            {
-                _notificationService.ErrorNotification(exc);
-                return RedirectToAction("List");
-            }
-        }
-
-        #endregion
-
-        #region Order details
-
-        #region Payments and other order workflow
-
-        [HttpPost, ActionName("Edit")]
-        [FormValueRequired("cancelorder")]
-        public virtual IActionResult CancelOrder(int id)
-        {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageOrders))
-                return AccessDeniedView();
-
-            //try to get an order with the specified id
-            var order = _orderService.GetOrderById(id);
-            if (order == null)
-                return RedirectToAction("List");
-
-            //a vendor does not have access to this functionality
-            if (_workContext.CurrentVendor != null)
-                return RedirectToAction("Edit", "Order", new { id });
-
-            try
-            {
-                _orderProcessingService.CancelOrder(order, true);
-                LogEditOrder(order.Id);
-
-                //prepare model
-                var model = _orderModelFactory.PrepareOrderModel(null, order);
-
-                return View(model);
-            }
-            catch (Exception exc)
-            {
-                //prepare model
-                var model = _orderModelFactory.PrepareOrderModel(null, order);
-
-                _notificationService.ErrorNotification(exc);
-                return View(model);
-            }
-        }
-
-        [HttpPost, ActionName("Edit")]
-        [FormValueRequired("captureorder")]
-        public virtual IActionResult CaptureOrder(int id)
-        {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageOrders))
-                return AccessDeniedView();
-
-            //try to get an order with the specified id
-            var order = _orderService.GetOrderById(id);
-            if (order == null)
-                return RedirectToAction("List");
-
-            //a vendor does not have access to this functionality
-            if (_workContext.CurrentVendor != null)
-                return RedirectToAction("Edit", "Order", new { id });
-
-            try
-            {
-                var errors = _orderProcessingService.Capture(order);
-                LogEditOrder(order.Id);
-
-                //prepare model
-                var model = _orderModelFactory.PrepareOrderModel(null, order);
-
-                foreach (var error in errors)
-                    _notificationService.ErrorNotification(error);
-
-                return View(model);
-            }
-            catch (Exception exc)
-            {
-                //prepare model
-                var model = _orderModelFactory.PrepareOrderModel(null, order);
-
-                _notificationService.ErrorNotification(exc);
-                return View(model);
-            }
-        }
-
-        [HttpPost, ActionName("Edit")]
-        [FormValueRequired("markorderaspaid")]
-        public virtual IActionResult MarkOrderAsPaid(int id)
-        {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageOrders))
-                return AccessDeniedView();
-
-            //try to get an order with the specified id
-            var order = _orderService.GetOrderById(id);
-            if (order == null)
-                return RedirectToAction("List");
-
-            //a vendor does not have access to this functionality
-            if (_workContext.CurrentVendor != null)
-                return RedirectToAction("Edit", "Order", new { id });
-
-            try
-            {
-                _orderProcessingService.MarkOrderAsPaid(order);
-                LogEditOrder(order.Id);
-
-                //prepare model
-                var model = _orderModelFactory.PrepareOrderModel(null, order);
-
-                return View(model);
-            }
-            catch (Exception exc)
-            {
-                //prepare model
-                var model = _orderModelFactory.PrepareOrderModel(null, order);
-
-                _notificationService.ErrorNotification(exc);
-                return View(model);
-            }
-        }
-
-        [HttpPost, ActionName("Edit")]
-        [FormValueRequired("refundorder")]
-        public virtual IActionResult RefundOrder(int id)
-        {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageOrders))
-                return AccessDeniedView();
-
-            //try to get an order with the specified id
-            var order = _orderService.GetOrderById(id);
-            if (order == null)
-                return RedirectToAction("List");
-
-            //a vendor does not have access to this functionality
-            if (_workContext.CurrentVendor != null)
-                return RedirectToAction("Edit", "Order", new { id });
-
-            try
-            {
-                var errors = _orderProcessingService.Refund(order);
-                LogEditOrder(order.Id);
-
-                //prepare model
-                var model = _orderModelFactory.PrepareOrderModel(null, order);
-
-                foreach (var error in errors)
-                    _notificationService.ErrorNotification(error);
-
-                return View(model);
-            }
-            catch (Exception exc)
-            {
-                //prepare model
-                var model = _orderModelFactory.PrepareOrderModel(null, order);
-
-                _notificationService.ErrorNotification(exc);
-                return View(model);
-            }
-        }
-
-        [HttpPost, ActionName("Edit")]
-        [FormValueRequired("refundorderoffline")]
-        public virtual IActionResult RefundOrderOffline(int id)
-        {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageOrders))
-                return AccessDeniedView();
-
-            //try to get an order with the specified id
-            var order = _orderService.GetOrderById(id);
-            if (order == null)
-                return RedirectToAction("List");
-
-            //a vendor does not have access to this functionality
-            if (_workContext.CurrentVendor != null)
-                return RedirectToAction("Edit", "Order", new { id });
-
-            try
-            {
-                _orderProcessingService.RefundOffline(order);
-                LogEditOrder(order.Id);
-
-                //prepare model
-                var model = _orderModelFactory.PrepareOrderModel(null, order);
-
-                return View(model);
-            }
-            catch (Exception exc)
-            {
-                //prepare model
-                var model = _orderModelFactory.PrepareOrderModel(null, order);
-
-                _notificationService.ErrorNotification(exc);
-                return View(model);
-            }
-        }
-
-        [HttpPost, ActionName("Edit")]
-        [FormValueRequired("voidorder")]
-        public virtual IActionResult VoidOrder(int id)
-        {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageOrders))
-                return AccessDeniedView();
-
-            //try to get an order with the specified id
-            var order = _orderService.GetOrderById(id);
-            if (order == null)
-                return RedirectToAction("List");
-
-            //a vendor does not have access to this functionality
-            if (_workContext.CurrentVendor != null)
-                return RedirectToAction("Edit", "Order", new { id });
-
-            try
-            {
-                var errors = _orderProcessingService.Void(order);
-                LogEditOrder(order.Id);
-
-                //prepare model
-                var model = _orderModelFactory.PrepareOrderModel(null, order);
-
-                foreach (var error in errors)
-                    _notificationService.ErrorNotification(error);
-
-                return View(model);
-            }
-            catch (Exception exc)
-            {
-                //prepare model
-                var model = _orderModelFactory.PrepareOrderModel(null, order);
-
-                _notificationService.ErrorNotification(exc);
-                return View(model);
-            }
-        }
-
-        [HttpPost, ActionName("Edit")]
-        [FormValueRequired("voidorderoffline")]
-        public virtual IActionResult VoidOrderOffline(int id)
-        {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageOrders))
-                return AccessDeniedView();
-
-            //try to get an order with the specified id
-            var order = _orderService.GetOrderById(id);
-            if (order == null)
-                return RedirectToAction("List");
-
-            //a vendor does not have access to this functionality
-            if (_workContext.CurrentVendor != null)
-                return RedirectToAction("Edit", "Order", new { id });
-
-            try
-            {
-                _orderProcessingService.VoidOffline(order);
-                LogEditOrder(order.Id);
-
-                //prepare model
-                var model = _orderModelFactory.PrepareOrderModel(null, order);
-
-                return View(model);
-            }
-            catch (Exception exc)
-            {
-                //prepare model
-                var model = _orderModelFactory.PrepareOrderModel(null, order);
-
-                _notificationService.ErrorNotification(exc);
-                return View(model);
-            }
-        }
-
-        public virtual IActionResult PartiallyRefundOrderPopup(int id, bool online)
-        {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageOrders))
-                return AccessDeniedView();
-
-            //try to get an order with the specified id
-            var order = _orderService.GetOrderById(id);
-            if (order == null)
-                return RedirectToAction("List");
-
-            //a vendor does not have access to this functionality
-            if (_workContext.CurrentVendor != null)
-                return RedirectToAction("Edit", "Order", new { id });
-
-            //prepare model
-            var model = _orderModelFactory.PrepareOrderModel(null, order);
-
-            return View(model);
-        }
-
-        [HttpPost]
-        [FormValueRequired("partialrefundorder")]
-        public virtual IActionResult PartiallyRefundOrderPopup(int id, bool online, OrderModel model)
-        {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageOrders))
-                return AccessDeniedView();
-
-            //try to get an order with the specified id
-            var order = _orderService.GetOrderById(id);
-            if (order == null)
-                return RedirectToAction("List");
-
-            //a vendor does not have access to this functionality
-            if (_workContext.CurrentVendor != null)
-                return RedirectToAction("Edit", "Order", new { id });
-
-            try
-            {
-                var amountToRefund = model.AmountToRefund;
-                if (amountToRefund <= decimal.Zero)
-                    throw new NopException("Enter amount to refund");
-
-                var maxAmountToRefund = order.OrderTotal - order.RefundedAmount;
-                if (amountToRefund > maxAmountToRefund)
-                    amountToRefund = maxAmountToRefund;
-
-                var errors = new List<string>();
-                if (online)
-                    errors = _orderProcessingService.PartiallyRefund(order, amountToRefund).ToList();
-                else
-                    _orderProcessingService.PartiallyRefundOffline(order, amountToRefund);
-
-                LogEditOrder(order.Id);
-
-                if (!errors.Any())
-                {
-                    //success
-                    ViewBag.RefreshPage = true;
-
-                    //prepare model
-                    model = _orderModelFactory.PrepareOrderModel(model, order);
-
-                    return View(model);
-                }
-
-                //prepare model
-                model = _orderModelFactory.PrepareOrderModel(model, order);
-
-                foreach (var error in errors)
-                    _notificationService.ErrorNotification(error);
-
-                return View(model);
-            }
-            catch (Exception exc)
-            {
-                //prepare model
-                model = _orderModelFactory.PrepareOrderModel(model, order);
-
-                _notificationService.ErrorNotification(exc);
-                return View(model);
-            }
-        }
-
-        [HttpPost, ActionName("Edit")]
-        [FormValueRequired("btnSaveOrderStatus")]
-        public virtual IActionResult ChangeOrderStatus(int id, OrderModel model)
-        {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageOrders))
-                return AccessDeniedView();
-
-            //try to get an order with the specified id
-            var order = _orderService.GetOrderById(id);
-            if (order == null)
-                return RedirectToAction("List");
-
-            //a vendor does not have access to this functionality
-            if (_workContext.CurrentVendor != null)
-                return RedirectToAction("Edit", "Order", new { id });
-
-            try
-            {
-                order.OrderStatusId = model.OrderStatusId;
-                _orderService.UpdateOrder(order);
-
-                //add a note
-                _orderService.InsertOrderNote(new OrderNote
-                {
-                    OrderId = order.Id,
-                    Note = $"Order status has been edited. New status: {_localizationService.GetLocalizedEnum(order.OrderStatus)}",
-                    DisplayToCustomer = false,
-                    CreatedOnUtc = DateTime.UtcNow
-                });
-
-                LogEditOrder(order.Id);
-
-                //prepare model
-                model = _orderModelFactory.PrepareOrderModel(model, order);
-
-                return View(model);
-            }
-            catch (Exception exc)
-            {
-                //prepare model
-                model = _orderModelFactory.PrepareOrderModel(model, order);
-
-                _notificationService.ErrorNotification(exc);
-                return View(model);
-            }
-        }
-
-        #endregion
-
-        #region Edit, delete
-
-        public virtual IActionResult Edit(int id)
-        {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageOrders))
-                return AccessDeniedView();
-
-            //try to get an order with the specified id
-            var order = _orderService.GetOrderById(id);
-            if (order == null || order.Deleted)
-                return RedirectToAction("List");
-
-            //a vendor does not have access to this functionality
-            if (_workContext.CurrentVendor != null && !HasAccessToOrder(order))
-                return RedirectToAction("List");
-
-            //prepare model
-            var model = _orderModelFactory.PrepareOrderModel(null, order);
-
-            return View(model);
-        }
-
-        [HttpPost]
-        public virtual IActionResult Delete(int id)
-        {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageOrders))
-                return AccessDeniedView();
-
-            //try to get an order with the specified id
-            var order = _orderService.GetOrderById(id);
-            if (order == null)
-                return RedirectToAction("List");
-
-            //a vendor does not have access to this functionality
-            if (_workContext.CurrentVendor != null)
-                return RedirectToAction("Edit", "Order", new { id });
-
-            _orderProcessingService.DeleteOrder(order);
-
-            //activity log
-            _customerActivityService.InsertActivity("DeleteOrder",
-                string.Format(_localizationService.GetResource("ActivityLog.DeleteOrder"), order.Id), order);
-
+            _notificationService.ErrorNotification(await _localizationService.GetResourceAsync("Admin.Orders.NoOrders"));
             return RedirectToAction("List");
         }
 
-        public virtual IActionResult PdfInvoice(int orderId)
+        try
         {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageOrders))
-                return AccessDeniedView();
+            var bytes = await _exportManager.ExportOrdersToXlsxAsync(orders);
+            return File(bytes, MimeTypes.TextXlsx, "orders.xlsx");
+        }
+        catch (Exception exc)
+        {
+            await _notificationService.ErrorNotificationAsync(exc);
+            return RedirectToAction("List");
+        }
+    }
 
-            //a vendor should have access only to his products
-            var vendorId = 0;
-            if (_workContext.CurrentVendor != null)
-            {
-                vendorId = _workContext.CurrentVendor.Id;
-            }
-
-            var order = _orderService.GetOrderById(orderId);
-            var orders = new List<Order>
-            {
-                order
-            };
-
-            byte[] bytes;
-            using (var stream = new MemoryStream())
-            {
-                _pdfService.PrintOrdersToPdf(stream, orders, _orderSettings.GeneratePdfInvoiceInCustomerLanguage ? 0 : _workContext.WorkingLanguage.Id, vendorId);
-                bytes = stream.ToArray();
-            }
-
-            return File(bytes, MimeTypes.ApplicationPdf, $"order_{order.Id}.pdf");
+    [HttpPost]
+    [CheckPermission(StandardPermission.Orders.ORDERS_IMPORT_EXPORT)]
+    public virtual async Task<IActionResult> ExportExcelSelected(string selectedIds)
+    {
+        var orders = new List<Order>();
+        if (selectedIds != null)
+        {
+            var ids = selectedIds
+                .Split(_separator, StringSplitOptions.RemoveEmptyEntries)
+                .Select(x => Convert.ToInt32(x))
+                .ToArray();
+            orders.AddRange(await (await _orderService.GetOrdersByIdsAsync(ids)).WhereAwait(HasAccessToOrderAsync).ToListAsync());
         }
 
-        [HttpPost, ActionName("PdfInvoice")]
-        [FormValueRequired("pdf-invoice-all")]
-        public virtual IActionResult PdfInvoiceAll(OrderSearchModel model)
+        try
         {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageOrders))
-                return AccessDeniedView();
-
-            //a vendor should have access only to his products
-            if (_workContext.CurrentVendor != null)
-            {
-                model.VendorId = _workContext.CurrentVendor.Id;
-            }
-
-            var startDateValue = model.StartDate == null ? null
-                            : (DateTime?)_dateTimeHelper.ConvertToUtcTime(model.StartDate.Value, _dateTimeHelper.CurrentTimeZone);
-
-            var endDateValue = model.EndDate == null ? null
-                            : (DateTime?)_dateTimeHelper.ConvertToUtcTime(model.EndDate.Value, _dateTimeHelper.CurrentTimeZone).AddDays(1);
-
-            var orderStatusIds = model.OrderStatusIds != null && !model.OrderStatusIds.Contains(0)
-                ? model.OrderStatusIds.ToList()
-                : null;
-            var paymentStatusIds = model.PaymentStatusIds != null && !model.PaymentStatusIds.Contains(0)
-                ? model.PaymentStatusIds.ToList()
-                : null;
-            var shippingStatusIds = model.ShippingStatusIds != null && !model.ShippingStatusIds.Contains(0)
-                ? model.ShippingStatusIds.ToList()
-                : null;
-
-            var filterByProductId = 0;
-            var product = _productService.GetProductById(model.ProductId);
-            if (product != null && (_workContext.CurrentVendor == null || product.VendorId == _workContext.CurrentVendor.Id))
-                filterByProductId = model.ProductId;
-
-            //load orders
-            var orders = _orderService.SearchOrders(storeId: model.StoreId,
-                vendorId: model.VendorId,
-                productId: filterByProductId,
-                warehouseId: model.WarehouseId,
-                paymentMethodSystemName: model.PaymentMethodSystemName,
-                createdFromUtc: startDateValue,
-                createdToUtc: endDateValue,
-                osIds: orderStatusIds,
-                psIds: paymentStatusIds,
-                ssIds: shippingStatusIds,
-                billingPhone: model.BillingPhone,
-                billingEmail: model.BillingEmail,
-                billingLastName: model.BillingLastName,
-                billingCountryId: model.BillingCountryId,
-                orderNotes: model.OrderNotes);
-
-            //ensure that we at least one order selected
-            if (!orders.Any())
-            {
-                _notificationService.ErrorNotification(_localizationService.GetResource("Admin.Orders.NoOrders"));
-                return RedirectToAction("List");
-            }
-
-            try
-            {
-                byte[] bytes;
-                using (var stream = new MemoryStream())
-                {
-                    _pdfService.PrintOrdersToPdf(stream, orders, _orderSettings.GeneratePdfInvoiceInCustomerLanguage ? 0 : _workContext.WorkingLanguage.Id, model.VendorId);
-                    bytes = stream.ToArray();
-                }
-
-                return File(bytes, MimeTypes.ApplicationPdf, "orders.pdf");
-            }
-            catch (Exception exc)
-            {
-                _notificationService.ErrorNotification(exc);
-                return RedirectToAction("List");
-            }
+            var bytes = await _exportManager.ExportOrdersToXlsxAsync(orders);
+            return File(bytes, MimeTypes.TextXlsx, "orders.xlsx");
         }
-
-        [HttpPost]
-        public virtual IActionResult PdfInvoiceSelected(string selectedIds)
+        catch (Exception exc)
         {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageOrders))
-                return AccessDeniedView();
-
-            var orders = new List<Order>();
-            if (selectedIds != null)
-            {
-                var ids = selectedIds
-                    .Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
-                    .Select(x => Convert.ToInt32(x))
-                    .ToArray();
-                orders.AddRange(_orderService.GetOrdersByIds(ids));
-            }
-
-            //a vendor should have access only to his products
-            var vendorId = 0;
-            if (_workContext.CurrentVendor != null)
-            {
-                orders = orders.Where(HasAccessToOrder).ToList();
-                vendorId = _workContext.CurrentVendor.Id;
-            }
-
-            try
-            {
-                byte[] bytes;
-                using (var stream = new MemoryStream())
-                {
-                    _pdfService.PrintOrdersToPdf(stream, orders, _orderSettings.GeneratePdfInvoiceInCustomerLanguage ? 0 : _workContext.WorkingLanguage.Id, vendorId);
-                    bytes = stream.ToArray();
-                }
-
-                return File(bytes, MimeTypes.ApplicationPdf, "orders.pdf");
-            }
-            catch (Exception exc)
-            {
-                _notificationService.ErrorNotification(exc);
-                return RedirectToAction("List");
-            }
+            await _notificationService.ErrorNotificationAsync(exc);
+            return RedirectToAction("List");
         }
+    }
 
-        //currently we use this method on the add product to order details pages
-        [HttpPost]
-        public virtual IActionResult ProductDetails_AttributeChange(int productId, bool validateAttributeConditions, IFormCollection form)
+    [HttpPost]
+    [CheckPermission(StandardPermission.Orders.ORDERS_IMPORT_EXPORT)]
+    public virtual async Task<IActionResult> ImportFromXlsx(IFormFile importexcelfile)
+    {
+        //a vendor cannot import orders
+        if (await _workContext.GetCurrentVendorAsync() != null)
+            return AccessDeniedView();
+
+        try
         {
-            var product = _productService.GetProductById(productId);
-            if (product == null)
-                return new NullJsonResult();
-
-            var errors = new List<string>();
-            var attributeXml = _productAttributeParser.ParseProductAttributes(product, form, errors);
-
-            //conditional attributes
-            var enabledAttributeMappingIds = new List<int>();
-            var disabledAttributeMappingIds = new List<int>();
-            if (validateAttributeConditions)
+            if (importexcelfile != null && importexcelfile.Length > 0)
             {
-                var attributes = _productAttributeService.GetProductAttributeMappingsByProductId(product.Id);
-                foreach (var attribute in attributes)
-                {
-                    var conditionMet = _productAttributeParser.IsConditionMet(attribute, attributeXml);
-                    if (!conditionMet.HasValue)
-                        continue;
-
-                    if (conditionMet.Value)
-                        enabledAttributeMappingIds.Add(attribute.Id);
-                    else
-                        disabledAttributeMappingIds.Add(attribute.Id);
-                }
-            }
-
-            return Json(new
-            {
-                enabledattributemappingids = enabledAttributeMappingIds.ToArray(),
-                disabledattributemappingids = disabledAttributeMappingIds.ToArray(),
-                message = errors.Any() ? errors.ToArray() : null
-            });
-        }
-
-        [HttpPost, ActionName("Edit")]
-        [FormValueRequired("btnSaveCC")]
-        public virtual IActionResult EditCreditCardInfo(int id, OrderModel model)
-        {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageOrders))
-                return AccessDeniedView();
-
-            //try to get an order with the specified id
-            var order = _orderService.GetOrderById(id);
-            if (order == null)
-                return RedirectToAction("List");
-
-            //a vendor does not have access to this functionality
-            if (_workContext.CurrentVendor != null)
-                return RedirectToAction("Edit", "Order", new { id });
-
-            if (order.AllowStoringCreditCardNumber)
-            {
-                var cardType = model.CardType;
-                var cardName = model.CardName;
-                var cardNumber = model.CardNumber;
-                var cardCvv2 = model.CardCvv2;
-                var cardExpirationMonth = model.CardExpirationMonth;
-                var cardExpirationYear = model.CardExpirationYear;
-
-                order.CardType = _encryptionService.EncryptText(cardType);
-                order.CardName = _encryptionService.EncryptText(cardName);
-                order.CardNumber = _encryptionService.EncryptText(cardNumber);
-                order.MaskedCreditCardNumber = _encryptionService.EncryptText(_paymentService.GetMaskedCreditCardNumber(cardNumber));
-                order.CardCvv2 = _encryptionService.EncryptText(cardCvv2);
-                order.CardExpirationMonth = _encryptionService.EncryptText(cardExpirationMonth);
-                order.CardExpirationYear = _encryptionService.EncryptText(cardExpirationYear);
-                _orderService.UpdateOrder(order);
-            }
-
-            //add a note
-            _orderService.InsertOrderNote(new OrderNote
-            {
-                OrderId = order.Id,
-                Note = "Credit card info has been edited",
-                DisplayToCustomer = false,
-                CreatedOnUtc = DateTime.UtcNow
-            });
-
-            LogEditOrder(order.Id);
-
-            //prepare model
-            model = _orderModelFactory.PrepareOrderModel(model, order);
-
-            return View(model);
-        }
-
-        [HttpPost, ActionName("Edit")]
-        [FormValueRequired("btnSaveOrderTotals")]
-        public virtual IActionResult EditOrderTotals(int id, OrderModel model)
-        {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageOrders))
-                return AccessDeniedView();
-
-            //try to get an order with the specified id
-            var order = _orderService.GetOrderById(id);
-            if (order == null)
-                return RedirectToAction("List");
-
-            //a vendor does not have access to this functionality
-            if (_workContext.CurrentVendor != null)
-                return RedirectToAction("Edit", "Order", new { id });
-
-            order.OrderSubtotalInclTax = model.OrderSubtotalInclTaxValue;
-            order.OrderSubtotalExclTax = model.OrderSubtotalExclTaxValue;
-            order.OrderSubTotalDiscountInclTax = model.OrderSubTotalDiscountInclTaxValue;
-            order.OrderSubTotalDiscountExclTax = model.OrderSubTotalDiscountExclTaxValue;
-            order.OrderShippingInclTax = model.OrderShippingInclTaxValue;
-            order.OrderShippingExclTax = model.OrderShippingExclTaxValue;
-            order.PaymentMethodAdditionalFeeInclTax = model.PaymentMethodAdditionalFeeInclTaxValue;
-            order.PaymentMethodAdditionalFeeExclTax = model.PaymentMethodAdditionalFeeExclTaxValue;
-            order.TaxRates = model.TaxRatesValue;
-            order.OrderTax = model.TaxValue;
-            order.OrderDiscount = model.OrderTotalDiscountValue;
-            order.OrderTotal = model.OrderTotalValue;
-            _orderService.UpdateOrder(order);
-
-            //add a note
-            _orderService.InsertOrderNote(new OrderNote
-            {
-                OrderId = order.Id,
-                Note = "Order totals have been edited",
-                DisplayToCustomer = false,
-                CreatedOnUtc = DateTime.UtcNow
-            });
-
-            LogEditOrder(order.Id);
-
-            //prepare model
-            model = _orderModelFactory.PrepareOrderModel(model, order);
-
-            return View(model);
-        }
-
-        [HttpPost, ActionName("Edit")]
-        [FormValueRequired("save-shipping-method")]
-        public virtual IActionResult EditShippingMethod(int id, OrderModel model)
-        {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageOrders))
-                return AccessDeniedView();
-
-            //try to get an order with the specified id
-            var order = _orderService.GetOrderById(id);
-            if (order == null)
-                return RedirectToAction("List");
-
-            //a vendor does not have access to this functionality
-            if (_workContext.CurrentVendor != null)
-                return RedirectToAction("Edit", "Order", new { id });
-
-            order.ShippingMethod = model.ShippingMethod;
-            _orderService.UpdateOrder(order);
-
-            //add a note
-            _orderService.InsertOrderNote(new OrderNote
-            {
-                OrderId = order.Id,
-                Note = "Shipping method has been edited",
-                DisplayToCustomer = false,
-                CreatedOnUtc = DateTime.UtcNow
-            });
-
-            LogEditOrder(order.Id);
-
-            //prepare model
-            model = _orderModelFactory.PrepareOrderModel(model, order);
-
-            //selected panel
-            SaveSelectedPanelName("order-billing-shipping", persistForTheNextRequest: false);
-
-            return View(model);
-        }
-
-        [HttpPost, ActionName("Edit")]
-        [FormValueRequired(FormValueRequirement.StartsWith, "btnSaveOrderItem")]
-        public virtual IActionResult EditOrderItem(int id, IFormCollection form)
-        {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageOrders))
-                return AccessDeniedView();
-
-            //try to get an order with the specified id
-            var order = _orderService.GetOrderById(id);
-            if (order == null)
-                return RedirectToAction("List");
-
-            //a vendor does not have access to this functionality
-            if (_workContext.CurrentVendor != null)
-                return RedirectToAction("Edit", "Order", new { id });
-
-            //get order item identifier
-            var orderItemId = 0;
-            foreach (var formValue in form.Keys)
-                if (formValue.StartsWith("btnSaveOrderItem", StringComparison.InvariantCultureIgnoreCase))
-                    orderItemId = Convert.ToInt32(formValue.Substring("btnSaveOrderItem".Length));
-
-            var orderItem = _orderService.GetOrderItemById(orderItemId)
-                ?? throw new ArgumentException("No order item found with the specified id");
-
-            if (!decimal.TryParse(form["pvUnitPriceInclTax" + orderItemId], out var unitPriceInclTax))
-                unitPriceInclTax = orderItem.UnitPriceInclTax;
-            if (!decimal.TryParse(form["pvUnitPriceExclTax" + orderItemId], out var unitPriceExclTax))
-                unitPriceExclTax = orderItem.UnitPriceExclTax;
-            if (!int.TryParse(form["pvQuantity" + orderItemId], out var quantity))
-                quantity = orderItem.Quantity;
-            if (!decimal.TryParse(form["pvDiscountInclTax" + orderItemId], out var discountInclTax))
-                discountInclTax = orderItem.DiscountAmountInclTax;
-            if (!decimal.TryParse(form["pvDiscountExclTax" + orderItemId], out var discountExclTax))
-                discountExclTax = orderItem.DiscountAmountExclTax;
-            if (!decimal.TryParse(form["pvPriceInclTax" + orderItemId], out var priceInclTax))
-                priceInclTax = orderItem.PriceInclTax;
-            if (!decimal.TryParse(form["pvPriceExclTax" + orderItemId], out var priceExclTax))
-                priceExclTax = orderItem.PriceExclTax;
-
-            var product = _productService.GetProductById(orderItem.ProductId);
-
-            if (quantity > 0)
-            {
-                var qtyDifference = orderItem.Quantity - quantity;
-
-                if (!_orderSettings.AutoUpdateOrderTotalsOnEditingOrder)
-                {
-                    orderItem.UnitPriceInclTax = unitPriceInclTax;
-                    orderItem.UnitPriceExclTax = unitPriceExclTax;
-                    orderItem.Quantity = quantity;
-                    orderItem.DiscountAmountInclTax = discountInclTax;
-                    orderItem.DiscountAmountExclTax = discountExclTax;
-                    orderItem.PriceInclTax = priceInclTax;
-                    orderItem.PriceExclTax = priceExclTax;
-                    _orderService.UpdateOrderItem(orderItem);
-                }
-
-                //adjust inventory
-                _productService.AdjustInventory(product, qtyDifference, orderItem.AttributesXml,
-                    string.Format(_localizationService.GetResource("Admin.StockQuantityHistory.Messages.EditOrder"), order.Id));
+                await _importManager.ImportOrdersFromXlsxAsync(importexcelfile.OpenReadStream());
             }
             else
             {
-                //adjust inventory
-                _productService.AdjustInventory(product, orderItem.Quantity, orderItem.AttributesXml,
-                    string.Format(_localizationService.GetResource("Admin.StockQuantityHistory.Messages.DeleteOrderItem"), order.Id));
-
-                //delete item
-                _orderService.DeleteOrderItem(orderItem);
+                _notificationService.ErrorNotification(await _localizationService.GetResourceAsync("Admin.Common.UploadFile"));
+                return RedirectToAction("List");
             }
+
+            _notificationService.SuccessNotification(await _localizationService.GetResourceAsync("Admin.Orders.Imported"));
+
+            return RedirectToAction("List");
+        }
+        catch (Exception exc)
+        {
+            await _notificationService.ErrorNotificationAsync(exc);
+            return RedirectToAction("List");
+        }
+    }
+
+    #endregion
+
+    #region Order details
+
+    #region Payments and other order workflow
+
+    [HttpPost, ActionName("Edit")]
+    [FormValueRequired("cancelorder")]
+    [CheckPermission(StandardPermission.Orders.ORDERS_CREATE_EDIT_DELETE)]
+    public virtual async Task<IActionResult> CancelOrder(int id)
+    {
+        //try to get an order with the specified id
+        var order = await _orderService.GetOrderByIdAsync(id);
+        if (order == null)
+            return RedirectToAction("List");
+
+        //a vendor does not have access to this functionality
+        if (await _workContext.GetCurrentVendorAsync() != null)
+            return RedirectToAction("Edit", new { id = order.Id });
+
+        try
+        {
+            await _orderProcessingService.CancelOrderAsync(order, true);
+            await LogEditOrderAsync(order.Id);
+
+            return RedirectToAction("Edit", new { id = order.Id });
+        }
+        catch (Exception exc)
+        {
+            //prepare model
+            var model = await _orderModelFactory.PrepareOrderModelAsync(null, order);
+
+            await _notificationService.ErrorNotificationAsync(exc);
+            return View(model);
+        }
+    }
+
+    [HttpPost, ActionName("Edit")]
+    [FormValueRequired("captureorder")]
+    [CheckPermission(StandardPermission.Orders.ORDERS_CREATE_EDIT_DELETE)]
+    public virtual async Task<IActionResult> CaptureOrder(int id)
+    {
+        //try to get an order with the specified id
+        var order = await _orderService.GetOrderByIdAsync(id);
+        if (order == null)
+            return RedirectToAction("List");
+
+        //a vendor does not have access to this functionality
+        if (await _workContext.GetCurrentVendorAsync() != null)
+            return RedirectToAction("Edit", new { id = order.Id });
+
+        try
+        {
+            var errors = await _orderProcessingService.CaptureAsync(order);
+            await LogEditOrderAsync(order.Id);
+
+            foreach (var error in errors)
+                _notificationService.ErrorNotification(error);
+
+            return RedirectToAction("Edit", new { id = order.Id });
+        }
+        catch (Exception exc)
+        {
+            //prepare model
+            var model = await _orderModelFactory.PrepareOrderModelAsync(null, order);
+
+            await _notificationService.ErrorNotificationAsync(exc);
+            return View(model);
+        }
+    }
+
+    [HttpPost, ActionName("Edit")]
+    [FormValueRequired("markorderaspaid")]
+    [CheckPermission(StandardPermission.Orders.ORDERS_CREATE_EDIT_DELETE)]
+    public virtual async Task<IActionResult> MarkOrderAsPaid(int id)
+    {
+        //try to get an order with the specified id
+        var order = await _orderService.GetOrderByIdAsync(id);
+        if (order == null)
+            return RedirectToAction("List");
+
+        //a vendor does not have access to this functionality
+        if (await _workContext.GetCurrentVendorAsync() != null)
+            return RedirectToAction("Edit", new { id = order.Id });
+
+        try
+        {
+            await _orderProcessingService.MarkOrderAsPaidAsync(order);
+            await LogEditOrderAsync(order.Id);
+
+            return RedirectToAction("Edit", new { id = order.Id });
+        }
+        catch (Exception exc)
+        {
+            //prepare model
+            var model = await _orderModelFactory.PrepareOrderModelAsync(null, order);
+
+            await _notificationService.ErrorNotificationAsync(exc);
+            return View(model);
+        }
+    }
+
+    [HttpPost, ActionName("Edit")]
+    [FormValueRequired("refundorder")]
+    [CheckPermission(StandardPermission.Orders.ORDERS_CREATE_EDIT_DELETE)]
+    public virtual async Task<IActionResult> RefundOrder(int id)
+    {
+        //try to get an order with the specified id
+        var order = await _orderService.GetOrderByIdAsync(id);
+        if (order == null)
+            return RedirectToAction("List");
+
+        //a vendor does not have access to this functionality
+        if (await _workContext.GetCurrentVendorAsync() != null)
+            return RedirectToAction("Edit", new { id = order.Id });
+
+        try
+        {
+            var errors = await _orderProcessingService.RefundAsync(order);
+            await LogEditOrderAsync(order.Id);
+
+            foreach (var error in errors)
+                _notificationService.ErrorNotification(error);
+
+            return RedirectToAction("Edit", new { id = order.Id });
+        }
+        catch (Exception exc)
+        {
+            //prepare model
+            var model = await _orderModelFactory.PrepareOrderModelAsync(null, order);
+
+            await _notificationService.ErrorNotificationAsync(exc);
+            return View(model);
+        }
+    }
+
+    [HttpPost, ActionName("Edit")]
+    [FormValueRequired("refundorderoffline")]
+    [CheckPermission(StandardPermission.Orders.ORDERS_CREATE_EDIT_DELETE)]
+    public virtual async Task<IActionResult> RefundOrderOffline(int id)
+    {
+        //try to get an order with the specified id
+        var order = await _orderService.GetOrderByIdAsync(id);
+        if (order == null)
+            return RedirectToAction("List");
+
+        //a vendor does not have access to this functionality
+        if (await _workContext.GetCurrentVendorAsync() != null)
+            return RedirectToAction("Edit", new { id = order.Id });
+
+        try
+        {
+            await _orderProcessingService.RefundOfflineAsync(order);
+            await LogEditOrderAsync(order.Id);
+
+            return RedirectToAction("Edit", new { id = order.Id });
+        }
+        catch (Exception exc)
+        {
+            //prepare model
+            var model = await _orderModelFactory.PrepareOrderModelAsync(null, order);
+
+            await _notificationService.ErrorNotificationAsync(exc);
+            return View(model);
+        }
+    }
+
+    [HttpPost, ActionName("Edit")]
+    [FormValueRequired("voidorder")]
+    [CheckPermission(StandardPermission.Orders.ORDERS_CREATE_EDIT_DELETE)]
+    public virtual async Task<IActionResult> VoidOrder(int id)
+    {
+        //try to get an order with the specified id
+        var order = await _orderService.GetOrderByIdAsync(id);
+        if (order == null)
+            return RedirectToAction("List");
+
+        //a vendor does not have access to this functionality
+        if (await _workContext.GetCurrentVendorAsync() != null)
+            return RedirectToAction("Edit", new { id = order.Id });
+
+        try
+        {
+            var errors = await _orderProcessingService.VoidAsync(order);
+            await LogEditOrderAsync(order.Id);
+
+            foreach (var error in errors)
+                _notificationService.ErrorNotification(error);
+
+            return RedirectToAction("Edit", new { id = order.Id });
+        }
+        catch (Exception exc)
+        {
+            //prepare model
+            var model = await _orderModelFactory.PrepareOrderModelAsync(null, order);
+
+            await _notificationService.ErrorNotificationAsync(exc);
+            return View(model);
+        }
+    }
+
+    [HttpPost, ActionName("Edit")]
+    [FormValueRequired("voidorderoffline")]
+    [CheckPermission(StandardPermission.Orders.ORDERS_CREATE_EDIT_DELETE)]
+    public virtual async Task<IActionResult> VoidOrderOffline(int id)
+    {
+        //try to get an order with the specified id
+        var order = await _orderService.GetOrderByIdAsync(id);
+        if (order == null)
+            return RedirectToAction("List");
+
+        //a vendor does not have access to this functionality
+        if (await _workContext.GetCurrentVendorAsync() != null)
+            return RedirectToAction("Edit", new { id = order.Id });
+
+        try
+        {
+            await _orderProcessingService.VoidOfflineAsync(order);
+            await LogEditOrderAsync(order.Id);
+
+            return RedirectToAction("Edit", new { id = order.Id });
+        }
+        catch (Exception exc)
+        {
+            //prepare model
+            var model = await _orderModelFactory.PrepareOrderModelAsync(null, order);
+
+            await _notificationService.ErrorNotificationAsync(exc);
+            return View(model);
+        }
+    }
+
+    [CheckPermission(StandardPermission.Orders.ORDERS_CREATE_EDIT_DELETE)]
+    public virtual async Task<IActionResult> PartiallyRefundOrderPopup(int id, bool online)
+    {
+        //try to get an order with the specified id
+        var order = await _orderService.GetOrderByIdAsync(id);
+        if (order == null)
+            return RedirectToAction("List");
+
+        //a vendor does not have access to this functionality
+        if (await _workContext.GetCurrentVendorAsync() != null)
+            return RedirectToAction("Edit", new { id = order.Id });
+
+        //prepare model
+        var model = await _orderModelFactory.PrepareOrderModelAsync(null, order);
+
+        return View(model);
+    }
+
+    [HttpPost]
+    [FormValueRequired("partialrefundorder")]
+    [CheckPermission(StandardPermission.Orders.ORDERS_CREATE_EDIT_DELETE)]
+    public virtual async Task<IActionResult> PartiallyRefundOrderPopup(int id, bool online, OrderModel model)
+    {
+        //try to get an order with the specified id
+        var order = await _orderService.GetOrderByIdAsync(id);
+        if (order == null)
+            return RedirectToAction("List");
+
+        //a vendor does not have access to this functionality
+        if (await _workContext.GetCurrentVendorAsync() != null)
+            return RedirectToAction("Edit", new { id = order.Id });
+
+        try
+        {
+            var amountToRefund = model.AmountToRefund;
+            if (amountToRefund <= decimal.Zero)
+                throw new NopException("Enter amount to refund");
+
+            var maxAmountToRefund = order.OrderTotal - order.RefundedAmount;
+            if (amountToRefund > maxAmountToRefund)
+                amountToRefund = maxAmountToRefund;
+
+            var errors = new List<string>();
+            if (online)
+                errors = (await _orderProcessingService.PartiallyRefundAsync(order, amountToRefund)).ToList();
+            else
+                await _orderProcessingService.PartiallyRefundOfflineAsync(order, amountToRefund);
+
+            await LogEditOrderAsync(order.Id);
+
+            if (!errors.Any())
+            {
+                //success
+                ViewBag.RefreshPage = true;
+
+                //prepare model
+                model = await _orderModelFactory.PrepareOrderModelAsync(model, order);
+
+                return View(model);
+            }
+
+            //prepare model
+            model = await _orderModelFactory.PrepareOrderModelAsync(model, order);
+
+            foreach (var error in errors)
+                _notificationService.ErrorNotification(error);
+
+            return View(model);
+        }
+        catch (Exception exc)
+        {
+            //prepare model
+            model = await _orderModelFactory.PrepareOrderModelAsync(model, order);
+
+            await _notificationService.ErrorNotificationAsync(exc);
+            return View(model);
+        }
+    }
+
+    [HttpPost, ActionName("Edit")]
+    [FormValueRequired("btnSaveOrderStatus")]
+    [CheckPermission(StandardPermission.Orders.ORDERS_CREATE_EDIT_DELETE)]
+    public virtual async Task<IActionResult> ChangeOrderStatus(int id, OrderModel model)
+    {
+        //try to get an order with the specified id
+        var order = await _orderService.GetOrderByIdAsync(id);
+        if (order == null)
+            return RedirectToAction("List");
+
+        //a vendor does not have access to this functionality
+        if (await _workContext.GetCurrentVendorAsync() != null)
+            return RedirectToAction("Edit", new { id = order.Id });
+
+        try
+        {
+            var prevOrderStatus = order.OrderStatus;
+
+            order.OrderStatusId = model.OrderStatusId;
+            await _orderService.UpdateOrderAsync(order);
+
+            await _eventPublisher.PublishAsync(new OrderStatusChangedEvent(order, prevOrderStatus));
+
+            //add a note
+            await _orderService.InsertOrderNoteAsync(new OrderNote
+            {
+                OrderId = order.Id,
+                Note = $"Order status has been edited. New status: {await _localizationService.GetLocalizedEnumAsync(order.OrderStatus)}",
+                DisplayToCustomer = false,
+                CreatedOnUtc = DateTime.UtcNow
+            });
+
+            await LogEditOrderAsync(order.Id);
+
+            return RedirectToAction("Edit", new { id = order.Id });
+        }
+        catch (Exception exc)
+        {
+            //prepare model
+            model = await _orderModelFactory.PrepareOrderModelAsync(model, order);
+
+            await _notificationService.ErrorNotificationAsync(exc);
+            return View(model);
+        }
+    }
+
+    #endregion
+
+    #region Edit, delete
+
+    [CheckPermission(StandardPermission.Orders.ORDERS_VIEW)]
+    public virtual async Task<IActionResult> Edit(int id)
+    {
+        //try to get an order with the specified id
+        var order = await _orderService.GetOrderByIdAsync(id);
+        if (order == null || order.Deleted)
+            return RedirectToAction("List");
+
+        //a vendor does not have access to this functionality
+        if (await _workContext.GetCurrentVendorAsync() != null && !await HasAccessToOrderAsync(order))
+            return RedirectToAction("List");
+
+        //prepare model
+        var model = await _orderModelFactory.PrepareOrderModelAsync(null, order);
+
+        return View(model);
+    }
+
+    [HttpPost]
+    [CheckPermission(StandardPermission.Orders.ORDERS_CREATE_EDIT_DELETE)]
+    public virtual async Task<IActionResult> Delete(int id)
+    {
+        //try to get an order with the specified id
+        var order = await _orderService.GetOrderByIdAsync(id);
+        if (order == null)
+            return RedirectToAction("List");
+
+        //a vendor does not have access to this functionality
+        if (await _workContext.GetCurrentVendorAsync() != null)
+            return RedirectToAction("Edit", new { id = order.Id });
+
+        await _orderProcessingService.DeleteOrderAsync(order);
+
+        //activity log
+        await _customerActivityService.InsertActivityAsync("DeleteOrder",
+            string.Format(await _localizationService.GetResourceAsync("ActivityLog.DeleteOrder"), order.Id), order);
+
+        return RedirectToAction("List");
+    }
+
+    [CheckPermission(StandardPermission.Orders.ORDERS_VIEW)]
+    public virtual async Task<IActionResult> PdfInvoice(int orderId)
+    {
+        //a vendor should have access only to their orders
+        if (!await HasAccessToOrderAsync(orderId))
+            return RedirectToAction("List");
+
+        //a vendor should have access only to his products
+        var currentVendor = await _workContext.GetCurrentVendorAsync();
+
+        var order = await _orderService.GetOrderByIdAsync(orderId);
+
+        byte[] bytes;
+        await using var stream = new MemoryStream();
+
+        await _pdfService.PrintOrderToPdfAsync(stream, order, _orderSettings.GeneratePdfInvoiceInCustomerLanguage ? null : await _workContext.GetWorkingLanguageAsync(), store: null, vendor: currentVendor);
+        bytes = stream.ToArray();
+
+        return File(bytes, MimeTypes.ApplicationPdf, string.Format(await _localizationService.GetResourceAsync("PDFInvoice.FileName"), order.CustomOrderNumber) + ".pdf");
+    }
+
+    [HttpPost, ActionName("PdfInvoice")]
+    [FormValueRequired("pdf-invoice-all")]
+    [CheckPermission(StandardPermission.Orders.ORDERS_VIEW)]
+    public virtual async Task<IActionResult> PdfInvoiceAll(OrderSearchModel model)
+    {
+        //a vendor should have access only to his products
+        var currentVendor = await _workContext.GetCurrentVendorAsync();
+        if (currentVendor != null)
+        {
+            model.VendorId = currentVendor.Id;
+        }
+
+        var startDateValue = model.StartDate == null ? null
+            : (DateTime?)_dateTimeHelper.ConvertToUtcTime(model.StartDate.Value, await _dateTimeHelper.GetCurrentTimeZoneAsync());
+
+        var endDateValue = model.EndDate == null ? null
+            : (DateTime?)_dateTimeHelper.ConvertToUtcTime(model.EndDate.Value, await _dateTimeHelper.GetCurrentTimeZoneAsync()).AddDays(1);
+
+        var orderStatusIds = model.OrderStatusIds != null && !model.OrderStatusIds.Contains(0)
+            ? model.OrderStatusIds.ToList()
+            : null;
+        var paymentStatusIds = model.PaymentStatusIds != null && !model.PaymentStatusIds.Contains(0)
+            ? model.PaymentStatusIds.ToList()
+            : null;
+        var shippingStatusIds = model.ShippingStatusIds != null && !model.ShippingStatusIds.Contains(0)
+            ? model.ShippingStatusIds.ToList()
+            : null;
+
+        var filterByProductId = 0;
+        var product = await _productService.GetProductByIdAsync(model.ProductId);
+        if (product != null && (currentVendor == null || product.VendorId == currentVendor.Id))
+            filterByProductId = model.ProductId;
+
+        //load orders
+        var orders = await _orderService.SearchOrdersAsync(storeId: model.StoreId,
+            vendorId: model.VendorId,
+            productId: filterByProductId,
+            warehouseId: model.WarehouseId,
+            paymentMethodSystemName: model.PaymentMethodSystemName,
+            createdFromUtc: startDateValue,
+            createdToUtc: endDateValue,
+            osIds: orderStatusIds,
+            psIds: paymentStatusIds,
+            ssIds: shippingStatusIds,
+            billingPhone: model.BillingPhone,
+            billingEmail: model.BillingEmail,
+            billingLastName: model.BillingLastName,
+            billingCountryId: model.BillingCountryId,
+            orderNotes: model.OrderNotes);
+
+        //ensure that we at least one order selected
+        if (!orders.Any())
+        {
+            _notificationService.ErrorNotification(await _localizationService.GetResourceAsync("Admin.Orders.NoOrders"));
+            return RedirectToAction("List");
+        }
+
+        try
+        {
+            byte[] bytes;
+            await using (var stream = new MemoryStream())
+            {
+                await _pdfService.PrintOrdersToPdfAsync(stream, orders, _orderSettings.GeneratePdfInvoiceInCustomerLanguage ? null : await _workContext.GetWorkingLanguageAsync(), currentVendor);
+                bytes = stream.ToArray();
+            }
+
+            return File(bytes, "application/zip", "orders.zip");
+        }
+        catch (Exception exc)
+        {
+            await _notificationService.ErrorNotificationAsync(exc);
+            return RedirectToAction("List");
+        }
+    }
+
+    [HttpPost]
+    [CheckPermission(StandardPermission.Orders.ORDERS_VIEW)]
+    public virtual async Task<IActionResult> PdfInvoiceSelected(string selectedIds)
+    {
+        var orders = new List<Order>();
+        if (selectedIds != null)
+        {
+            var ids = selectedIds
+                .Split(_separator, StringSplitOptions.RemoveEmptyEntries)
+                .Select(x => Convert.ToInt32(x))
+                .ToArray();
+            orders.AddRange(await _orderService.GetOrdersByIdsAsync(ids));
+        }
+
+        //a vendor should have access only to his products
+        var currentVendor = await _workContext.GetCurrentVendorAsync();
+        if (currentVendor != null)
+        {
+            orders = await orders.WhereAwait(HasAccessToOrderAsync).ToListAsync();
+        }
+
+        try
+        {
+            byte[] bytes;
+            await using (var stream = new MemoryStream())
+            {
+                await _pdfService.PrintOrdersToPdfAsync(stream, orders, _orderSettings.GeneratePdfInvoiceInCustomerLanguage ? null : await _workContext.GetWorkingLanguageAsync(), currentVendor);
+                bytes = stream.ToArray();
+            }
+
+            return File(bytes, "application/zip", "orders.zip");
+        }
+        catch (Exception exc)
+        {
+            await _notificationService.ErrorNotificationAsync(exc);
+            return RedirectToAction("List");
+        }
+    }
+
+    //currently we use this method on the add product to order details pages
+    [HttpPost]
+    [CheckPermission(StandardPermission.Orders.ORDERS_VIEW)]
+    public virtual async Task<IActionResult> ProductDetails_AttributeChange(int productId, bool validateAttributeConditions, IFormCollection form)
+    {
+        var product = await _productService.GetProductByIdAsync(productId);
+        if (product == null)
+            return new NullJsonResult();
+
+        var errors = new List<string>();
+        var attributeXml = await _productAttributeParser.ParseProductAttributesAsync(product, form, errors);
+
+        //conditional attributes
+        var enabledAttributeMappingIds = new List<int>();
+        var disabledAttributeMappingIds = new List<int>();
+        if (validateAttributeConditions)
+        {
+            var attributes = await _productAttributeService.GetProductAttributeMappingsByProductIdAsync(product.Id);
+            foreach (var attribute in attributes)
+            {
+                var conditionMet = await _productAttributeParser.IsConditionMetAsync(attribute, attributeXml);
+                if (!conditionMet.HasValue)
+                    continue;
+
+                if (conditionMet.Value)
+                    enabledAttributeMappingIds.Add(attribute.Id);
+                else
+                    disabledAttributeMappingIds.Add(attribute.Id);
+            }
+        }
+
+        return Json(new
+        {
+            enabledattributemappingids = enabledAttributeMappingIds.ToArray(),
+            disabledattributemappingids = disabledAttributeMappingIds.ToArray(),
+            message = errors.Any() ? errors.ToArray() : null
+        });
+    }
+
+    [HttpPost, ActionName("Edit")]
+    [FormValueRequired("btnSaveCC")]
+    [CheckPermission(StandardPermission.Orders.ORDERS_CREATE_EDIT_DELETE)]
+    public virtual async Task<IActionResult> EditCreditCardInfo(int id, OrderModel model)
+    {
+        //try to get an order with the specified id
+        var order = await _orderService.GetOrderByIdAsync(id);
+        if (order == null)
+            return RedirectToAction("List");
+
+        //a vendor does not have access to this functionality
+        if (await _workContext.GetCurrentVendorAsync() != null)
+            return RedirectToAction("Edit", new { id = order.Id });
+
+        if (order.AllowStoringCreditCardNumber)
+        {
+            var cardType = model.CardType;
+            var cardName = model.CardName;
+            var cardNumber = model.CardNumber;
+            var cardCvv2 = model.CardCvv2;
+            var cardExpirationMonth = model.CardExpirationMonth;
+            var cardExpirationYear = model.CardExpirationYear;
+
+            order.CardType = _encryptionService.EncryptText(cardType);
+            order.CardName = _encryptionService.EncryptText(cardName);
+            order.CardNumber = _encryptionService.EncryptText(cardNumber);
+            order.MaskedCreditCardNumber = _encryptionService.EncryptText(_paymentService.GetMaskedCreditCardNumber(cardNumber));
+            order.CardCvv2 = _encryptionService.EncryptText(cardCvv2);
+            order.CardExpirationMonth = _encryptionService.EncryptText(cardExpirationMonth);
+            order.CardExpirationYear = _encryptionService.EncryptText(cardExpirationYear);
+            await _orderService.UpdateOrderAsync(order);
+        }
+
+        //add a note
+        await _orderService.InsertOrderNoteAsync(new OrderNote
+        {
+            OrderId = order.Id,
+            Note = "Credit card info has been edited",
+            DisplayToCustomer = false,
+            CreatedOnUtc = DateTime.UtcNow
+        });
+
+        await LogEditOrderAsync(order.Id);
+
+        return RedirectToAction("Edit", new { id = order.Id });
+    }
+
+    [HttpPost, ActionName("Edit")]
+    [FormValueRequired("btnSaveOrderTotals")]
+    [CheckPermission(StandardPermission.Orders.ORDERS_CREATE_EDIT_DELETE)]
+    public virtual async Task<IActionResult> EditOrderTotals(int id, OrderModel model)
+    {
+        //try to get an order with the specified id
+        var order = await _orderService.GetOrderByIdAsync(id);
+        if (order == null)
+            return RedirectToAction("List");
+
+        //a vendor does not have access to this functionality
+        if (await _workContext.GetCurrentVendorAsync() != null)
+            return RedirectToAction("Edit", new { id = order.Id });
+
+        order.OrderSubtotalInclTax = model.OrderSubtotalInclTaxValue;
+        order.OrderSubtotalExclTax = model.OrderSubtotalExclTaxValue;
+        order.OrderSubTotalDiscountInclTax = model.OrderSubTotalDiscountInclTaxValue;
+        order.OrderSubTotalDiscountExclTax = model.OrderSubTotalDiscountExclTaxValue;
+        order.OrderShippingInclTax = model.OrderShippingInclTaxValue;
+        order.OrderShippingExclTax = model.OrderShippingExclTaxValue;
+        order.PaymentMethodAdditionalFeeInclTax = model.PaymentMethodAdditionalFeeInclTaxValue;
+        order.PaymentMethodAdditionalFeeExclTax = model.PaymentMethodAdditionalFeeExclTaxValue;
+        order.TaxRates = model.TaxRatesValue;
+        order.OrderTax = model.TaxValue;
+        order.OrderDiscount = model.OrderTotalDiscountValue;
+        order.OrderTotal = model.OrderTotalValue;
+        await _orderService.UpdateOrderAsync(order);
+
+        //add a note
+        await _orderService.InsertOrderNoteAsync(new OrderNote
+        {
+            OrderId = order.Id,
+            Note = "Order totals have been edited",
+            DisplayToCustomer = false,
+            CreatedOnUtc = DateTime.UtcNow
+        });
+
+        await LogEditOrderAsync(order.Id);
+
+        return RedirectToAction("Edit", new { id = order.Id });
+    }
+
+    [HttpPost, ActionName("Edit")]
+    [FormValueRequired("save-shipping-method")]
+    [CheckPermission(StandardPermission.Orders.ORDERS_CREATE_EDIT_DELETE)]
+    public virtual async Task<IActionResult> EditShippingMethod(int id, OrderModel model)
+    {
+        //try to get an order with the specified id
+        var order = await _orderService.GetOrderByIdAsync(id);
+        if (order == null)
+            return RedirectToAction("List");
+
+        //a vendor does not have access to this functionality
+        if (await _workContext.GetCurrentVendorAsync() != null)
+            return RedirectToAction("Edit", new { id = order.Id });
+
+        order.ShippingMethod = model.ShippingMethod;
+        await _orderService.UpdateOrderAsync(order);
+
+        //add a note
+        await _orderService.InsertOrderNoteAsync(new OrderNote
+        {
+            OrderId = order.Id,
+            Note = "Shipping method has been edited",
+            DisplayToCustomer = false,
+            CreatedOnUtc = DateTime.UtcNow
+        });
+
+        await LogEditOrderAsync(order.Id);
+
+        //selected card
+        SaveSelectedCardName("order-billing-shipping");
+
+        return RedirectToAction("Edit", new { id = order.Id });
+    }
+
+    [HttpPost, ActionName("Edit")]
+    [FormValueRequired(FormValueRequirement.StartsWith, "btnSaveOrderItem")]
+    [CheckPermission(StandardPermission.Orders.ORDERS_CREATE_EDIT_DELETE)]
+    public virtual async Task<IActionResult> EditOrderItem(int id, IFormCollection form)
+    {
+        //try to get an order with the specified id
+        var order = await _orderService.GetOrderByIdAsync(id);
+        if (order == null)
+            return RedirectToAction("List");
+
+        //a vendor does not have access to this functionality
+        if (await _workContext.GetCurrentVendorAsync() != null)
+            return RedirectToAction("Edit", new { id = order.Id });
+
+        //get order item identifier
+        var orderItemId = 0;
+        foreach (var formValue in form.Keys)
+            if (formValue.StartsWith("btnSaveOrderItem", StringComparison.InvariantCultureIgnoreCase))
+                orderItemId = Convert.ToInt32(formValue["btnSaveOrderItem".Length..]);
+
+        var orderItem = await _orderService.GetOrderItemByIdAsync(orderItemId)
+            ?? throw new ArgumentException("No order item found with the specified id");
+
+        if (!decimal.TryParse(form["pvUnitPriceInclTax" + orderItemId], out var unitPriceInclTax))
+            unitPriceInclTax = orderItem.UnitPriceInclTax;
+        if (!decimal.TryParse(form["pvUnitPriceExclTax" + orderItemId], out var unitPriceExclTax))
+            unitPriceExclTax = orderItem.UnitPriceExclTax;
+        if (!int.TryParse(form["pvQuantity" + orderItemId], out var quantity))
+            quantity = orderItem.Quantity;
+        if (!decimal.TryParse(form["pvDiscountInclTax" + orderItemId], out var discountInclTax))
+            discountInclTax = orderItem.DiscountAmountInclTax;
+        if (!decimal.TryParse(form["pvDiscountExclTax" + orderItemId], out var discountExclTax))
+            discountExclTax = orderItem.DiscountAmountExclTax;
+        if (!decimal.TryParse(form["pvPriceInclTax" + orderItemId], out var priceInclTax))
+            priceInclTax = orderItem.PriceInclTax;
+        if (!decimal.TryParse(form["pvPriceExclTax" + orderItemId], out var priceExclTax))
+            priceExclTax = orderItem.PriceExclTax;
+
+        var product = await _productService.GetProductByIdAsync(orderItem.ProductId);
+
+        if (quantity > 0)
+        {
+            var qtyDifference = orderItem.Quantity - quantity;
+
+            if (!_orderSettings.AutoUpdateOrderTotalsOnEditingOrder)
+            {
+                orderItem.UnitPriceInclTax = unitPriceInclTax;
+                orderItem.UnitPriceExclTax = unitPriceExclTax;
+                orderItem.Quantity = quantity;
+                orderItem.DiscountAmountInclTax = discountInclTax;
+                orderItem.DiscountAmountExclTax = discountExclTax;
+                orderItem.PriceInclTax = priceInclTax;
+                orderItem.PriceExclTax = priceExclTax;
+                await _orderService.UpdateOrderItemAsync(orderItem);
+            }
+
+            //adjust inventory
+            await _productService.AdjustInventoryAsync(product, qtyDifference, orderItem.AttributesXml,
+                string.Format(await _localizationService.GetResourceAsync("Admin.StockQuantityHistory.Messages.EditOrder"), order.Id));
+        }
+        else
+        {
+            //adjust inventory
+            await _productService.AdjustInventoryAsync(product, orderItem.Quantity, orderItem.AttributesXml,
+                string.Format(await _localizationService.GetResourceAsync("Admin.StockQuantityHistory.Messages.DeleteOrderItem"), order.Id));
+
+            //delete item
+            await _orderService.DeleteOrderItemAsync(orderItem);
+        }
+
+        //update order totals
+        var updateOrderParameters = new UpdateOrderParameters(order, orderItem)
+        {
+            PriceInclTax = unitPriceInclTax,
+            PriceExclTax = unitPriceExclTax,
+            DiscountAmountInclTax = discountInclTax,
+            DiscountAmountExclTax = discountExclTax,
+            SubTotalInclTax = priceInclTax,
+            SubTotalExclTax = priceExclTax,
+            Quantity = quantity
+        };
+        await _orderProcessingService.UpdateOrderTotalsAsync(updateOrderParameters);
+
+        //add a note
+        await _orderService.InsertOrderNoteAsync(new OrderNote
+        {
+            OrderId = order.Id,
+            Note = "Order item has been edited",
+            DisplayToCustomer = false,
+            CreatedOnUtc = DateTime.UtcNow
+        });
+
+        await LogEditOrderAsync(order.Id);
+
+        foreach (var warning in updateOrderParameters.Warnings)
+            _notificationService.WarningNotification(warning);
+
+        //selected card
+        SaveSelectedCardName("order-products");
+
+        return RedirectToAction("Edit", new { id = order.Id });
+    }
+
+    [HttpPost, ActionName("Edit")]
+    [FormValueRequired(FormValueRequirement.StartsWith, "btnDeleteOrderItem")]
+    [CheckPermission(StandardPermission.Orders.ORDERS_CREATE_EDIT_DELETE)]
+    public virtual async Task<IActionResult> DeleteOrderItem(int id, IFormCollection form)
+    {
+        //try to get an order with the specified id
+        var order = await _orderService.GetOrderByIdAsync(id);
+        if (order == null)
+            return RedirectToAction("List");
+
+        //a vendor does not have access to this functionality
+        if (await _workContext.GetCurrentVendorAsync() != null)
+            return RedirectToAction("Edit", new { id = order.Id });
+
+        //get order item identifier
+        var orderItemId = 0;
+        foreach (var formValue in form.Keys)
+            if (formValue.StartsWith("btnDeleteOrderItem", StringComparison.InvariantCultureIgnoreCase))
+                orderItemId = Convert.ToInt32(formValue["btnDeleteOrderItem".Length..]);
+
+        var orderItem = await _orderService.GetOrderItemByIdAsync(orderItemId)
+            ?? throw new ArgumentException("No order item found with the specified id");
+
+        if ((await _giftCardService.GetGiftCardsByPurchasedWithOrderItemIdAsync(orderItem.Id)).Any())
+        {
+            //we cannot delete an order item with associated gift cards
+            //a store owner should delete them first
+
+            _notificationService.ErrorNotification(await _localizationService.GetResourceAsync("Admin.Orders.OrderItem.DeleteAssociatedGiftCardRecordError"));
+        }
+        else
+        {
+            var product = await _productService.GetProductByIdAsync(orderItem.ProductId);
+
+            //adjust inventory
+            await _productService.AdjustInventoryAsync(product, orderItem.Quantity, orderItem.AttributesXml,
+                string.Format(await _localizationService.GetResourceAsync("Admin.StockQuantityHistory.Messages.DeleteOrderItem"), order.Id));
+
+            //delete item
+            await _orderService.DeleteOrderItemAsync(orderItem);
+
+            //update order totals
+            var updateOrderParameters = new UpdateOrderParameters(order, orderItem);
+            await _orderProcessingService.UpdateOrderTotalsAsync(updateOrderParameters);
+
+            //add a note
+            await _orderService.InsertOrderNoteAsync(new OrderNote
+            {
+                OrderId = order.Id,
+                Note = "Order item has been deleted",
+                DisplayToCustomer = false,
+                CreatedOnUtc = DateTime.UtcNow
+            });
+
+            await LogEditOrderAsync(order.Id);
+
+            foreach (var warning in updateOrderParameters.Warnings)
+                _notificationService.WarningNotification(warning);
+        }
+
+        //selected card
+        SaveSelectedCardName("order-products");
+
+        return RedirectToAction("Edit", new { id = order.Id });
+    }
+
+    [HttpPost, ActionName("Edit")]
+    [FormValueRequired(FormValueRequirement.StartsWith, "btnResetDownloadCount")]
+    [CheckPermission(StandardPermission.Orders.ORDERS_CREATE_EDIT_DELETE)]
+    public virtual async Task<IActionResult> ResetDownloadCount(int id, IFormCollection form)
+    {
+        //try to get an order with the specified id
+        var order = await _orderService.GetOrderByIdAsync(id);
+        if (order == null)
+            return RedirectToAction("List");
+
+        //get order item identifier
+        var orderItemId = 0;
+        foreach (var formValue in form.Keys)
+            if (formValue.StartsWith("btnResetDownloadCount", StringComparison.InvariantCultureIgnoreCase))
+                orderItemId = Convert.ToInt32(formValue["btnResetDownloadCount".Length..]);
+
+        var orderItem = await _orderService.GetOrderItemByIdAsync(orderItemId)
+            ?? throw new ArgumentException("No order item found with the specified id");
+
+        //ensure a vendor has access only to his products 
+        if (await _workContext.GetCurrentVendorAsync() != null && !await HasAccessToProductAsync(orderItem))
+            return RedirectToAction("List");
+
+        orderItem.DownloadCount = 0;
+        await _orderService.UpdateOrderItemAsync(orderItem);
+        await LogEditOrderAsync(order.Id);
+
+        //selected card
+        SaveSelectedCardName("order-products");
+
+        return RedirectToAction("Edit", new { id = order.Id });
+    }
+
+    [HttpPost, ActionName("Edit")]
+    [FormValueRequired(FormValueRequirement.StartsWith, "btnPvActivateDownload")]
+    [CheckPermission(StandardPermission.Orders.ORDERS_CREATE_EDIT_DELETE)]
+    public virtual async Task<IActionResult> ActivateDownloadItem(int id, IFormCollection form)
+    {
+        //try to get an order with the specified id
+        var order = await _orderService.GetOrderByIdAsync(id);
+        if (order == null)
+            return RedirectToAction("List");
+
+        //get order item identifier
+        var orderItemId = 0;
+        foreach (var formValue in form.Keys)
+            if (formValue.StartsWith("btnPvActivateDownload", StringComparison.InvariantCultureIgnoreCase))
+                orderItemId = Convert.ToInt32(formValue["btnPvActivateDownload".Length..]);
+
+        var orderItem = await _orderService.GetOrderItemByIdAsync(orderItemId)
+            ?? throw new ArgumentException("No order item found with the specified id");
+
+        //ensure a vendor has access only to his products 
+        if (await _workContext.GetCurrentVendorAsync() != null && !await HasAccessToProductAsync(orderItem))
+            return RedirectToAction("List");
+
+        orderItem.IsDownloadActivated = !orderItem.IsDownloadActivated;
+        await _orderService.UpdateOrderItemAsync(orderItem);
+
+        await LogEditOrderAsync(order.Id);
+
+        //selected card
+        SaveSelectedCardName("order-products");
+
+        return RedirectToAction("Edit", new { id = order.Id });
+    }
+
+    [CheckPermission(StandardPermission.Orders.ORDERS_CREATE_EDIT_DELETE)]
+    public virtual async Task<IActionResult> UploadLicenseFilePopup(int id, int orderItemId)
+    {
+        //try to get an order with the specified id
+        var order = await _orderService.GetOrderByIdAsync(id);
+        if (order == null)
+            return RedirectToAction("List");
+
+        //try to get an order item with the specified id
+        var orderItem = await _orderService.GetOrderItemByIdAsync(orderItemId)
+            ?? throw new ArgumentException("No order item found with the specified id");
+
+        var product = await _productService.GetProductByIdAsync(orderItem.ProductId)
+            ?? throw new ArgumentException("No product found with the specified order item id");
+
+        if (!product.IsDownload)
+            throw new ArgumentException("Product is not downloadable");
+
+        //ensure a vendor has access only to his products 
+        if (await _workContext.GetCurrentVendorAsync() != null && !await HasAccessToProductAsync(orderItem))
+            return RedirectToAction("List");
+
+        //prepare model
+        var model = await _orderModelFactory.PrepareUploadLicenseModelAsync(new UploadLicenseModel(), order, orderItem);
+
+        return View(model);
+    }
+
+    [HttpPost]
+    [FormValueRequired("uploadlicense")]
+    [CheckPermission(StandardPermission.Orders.ORDERS_CREATE_EDIT_DELETE)]
+    public virtual async Task<IActionResult> UploadLicenseFilePopup(UploadLicenseModel model)
+    {
+        //try to get an order with the specified id
+        var order = await _orderService.GetOrderByIdAsync(model.OrderId);
+        if (order == null)
+            return RedirectToAction("List");
+
+        var orderItem = await _orderService.GetOrderItemByIdAsync(model.OrderItemId)
+            ?? throw new ArgumentException("No order item found with the specified id");
+
+        //ensure a vendor has access only to his products 
+        if (await _workContext.GetCurrentVendorAsync() != null && !await HasAccessToProductAsync(orderItem))
+            return RedirectToAction("List");
+
+        //attach license
+        if (model.LicenseDownloadId > 0)
+            orderItem.LicenseDownloadId = model.LicenseDownloadId;
+        else
+            orderItem.LicenseDownloadId = null;
+
+        await _orderService.UpdateOrderItemAsync(orderItem);
+
+        await LogEditOrderAsync(order.Id);
+
+        //success
+        ViewBag.RefreshPage = true;
+
+        return View(model);
+    }
+
+    [HttpPost, ActionName("UploadLicenseFilePopup")]
+    [FormValueRequired("deletelicense")]
+    [CheckPermission(StandardPermission.Orders.ORDERS_CREATE_EDIT_DELETE)]
+    public virtual async Task<IActionResult> DeleteLicenseFilePopup(UploadLicenseModel model)
+    {
+        //try to get an order with the specified id
+        var order = await _orderService.GetOrderByIdAsync(model.OrderId);
+        if (order == null)
+            return RedirectToAction("List");
+
+        var orderItem = await _orderService.GetOrderItemByIdAsync(model.OrderItemId)
+            ?? throw new ArgumentException("No order item found with the specified id");
+
+        //ensure a vendor has access only to his products 
+        if (await _workContext.GetCurrentVendorAsync() != null && !await HasAccessToProductAsync(orderItem))
+            return RedirectToAction("List");
+
+        //attach license
+        orderItem.LicenseDownloadId = null;
+
+        await _orderService.UpdateOrderItemAsync(orderItem);
+
+        await LogEditOrderAsync(order.Id);
+
+        //success
+        ViewBag.RefreshPage = true;
+
+        return View(model);
+    }
+
+    [CheckPermission(StandardPermission.Orders.ORDERS_CREATE_EDIT_DELETE)]
+    public virtual async Task<IActionResult> AddProductToOrder(int orderId)
+    {
+        //try to get an order with the specified id
+        var order = await _orderService.GetOrderByIdAsync(orderId);
+        if (order == null)
+            return RedirectToAction("List");
+
+        //a vendor does not have access to this functionality
+        if (await _workContext.GetCurrentVendorAsync() != null)
+            return RedirectToAction("Edit", "Order", new { id = orderId });
+
+        //prepare model
+        var model = await _orderModelFactory.PrepareAddProductToOrderSearchModelAsync(new AddProductToOrderSearchModel(), order);
+
+        return View(model);
+    }
+
+    [HttpPost]
+    [CheckPermission(StandardPermission.Orders.ORDERS_CREATE_EDIT_DELETE)]
+    public virtual async Task<IActionResult> AddProductToOrder(AddProductToOrderSearchModel searchModel)
+    {
+        //try to get an order with the specified id
+        var order = await _orderService.GetOrderByIdAsync(searchModel.OrderId)
+            ?? throw new ArgumentException("No order found with the specified id");
+
+        //a vendor does not have access to this functionality
+        if (await _workContext.GetCurrentVendorAsync() != null)
+            return Content(string.Empty);
+
+        //prepare model
+        var model = await _orderModelFactory.PrepareAddProductToOrderListModelAsync(searchModel, order);
+
+        return Json(model);
+    }
+
+    [CheckPermission(StandardPermission.Orders.ORDERS_CREATE_EDIT_DELETE)]
+    public virtual async Task<IActionResult> AddProductToOrderDetails(int orderId, int productId)
+    {
+        //try to get an order with the specified id
+        var order = await _orderService.GetOrderByIdAsync(orderId)
+            ?? throw new ArgumentException("No order found with the specified id");
+
+        //try to get a product with the specified id
+        var product = await _productService.GetProductByIdAsync(productId)
+            ?? throw new ArgumentException("No product found with the specified id");
+
+        //a vendor does not have access to this functionality
+        if (await _workContext.GetCurrentVendorAsync() != null)
+            return RedirectToAction("Edit", "Order", new { id = orderId });
+
+        //prepare model
+        var model = await _orderModelFactory.PrepareAddProductToOrderModelAsync(new AddProductToOrderModel(), order, product);
+
+        return View(model);
+    }
+
+    [HttpPost]
+    [CheckPermission(StandardPermission.Orders.ORDERS_CREATE_EDIT_DELETE)]
+    public virtual async Task<IActionResult> AddProductToOrderDetails(int orderId, int productId, AddProductToOrderModel model, IFormCollection form)
+    {
+        //a vendor does not have access to this functionality
+        if (await _workContext.GetCurrentVendorAsync() != null)
+            return RedirectToAction("Edit", "Order", new { id = orderId });
+
+        //try to get an order with the specified id
+        var order = await _orderService.GetOrderByIdAsync(orderId)
+            ?? throw new ArgumentException("No order found with the specified id");
+
+        //try to get a product with the specified id
+        var product = await _productService.GetProductByIdAsync(productId)
+            ?? throw new ArgumentException("No product found with the specified id");
+
+        //try to get a customer with the specified id
+        var customer = await _customerService.GetCustomerByIdAsync(order.CustomerId)
+            ?? throw new ArgumentException("No customer found with the specified id");
+
+        //warnings
+        var warnings = new List<string>();
+
+        //attributes
+        var attributesXml = await _productAttributeParser.ParseProductAttributesAsync(product, form, warnings);
+
+        //rental product
+        _productAttributeParser.ParseRentalDates(product, form, out var rentalStartDate, out var rentalEndDate);
+
+        //warnings
+        warnings.AddRange(await _shoppingCartService.GetShoppingCartItemAttributeWarningsAsync(customer, ShoppingCartType.ShoppingCart, product, model.Quantity, attributesXml));
+        warnings.AddRange(await _shoppingCartService.GetShoppingCartItemGiftCardWarningsAsync(ShoppingCartType.ShoppingCart, product, attributesXml));
+        warnings.AddRange(await _shoppingCartService.GetRentalProductWarningsAsync(product, rentalStartDate, rentalEndDate));
+        if (!warnings.Any())
+        {
+            //no errors
+            var currentStore = await _storeContext.GetCurrentStoreAsync();
+
+            //attributes
+            var attributeDescription = await _productAttributeFormatter.FormatAttributesAsync(product, attributesXml, customer, currentStore);
+
+            //weight
+            var itemWeight = await _shippingService.GetShoppingCartItemWeightAsync(product, attributesXml);
+
+            //save item
+            var orderItem = new OrderItem
+            {
+                OrderItemGuid = Guid.NewGuid(),
+                OrderId = order.Id,
+                ProductId = product.Id,
+                UnitPriceInclTax = model.UnitPriceInclTax,
+                UnitPriceExclTax = model.UnitPriceExclTax,
+                PriceInclTax = model.SubTotalInclTax,
+                PriceExclTax = model.SubTotalExclTax,
+                OriginalProductCost = await _priceCalculationService.GetProductCostAsync(product, attributesXml),
+                AttributeDescription = attributeDescription,
+                AttributesXml = attributesXml,
+                Quantity = model.Quantity,
+                DiscountAmountInclTax = decimal.Zero,
+                DiscountAmountExclTax = decimal.Zero,
+                DownloadCount = 0,
+                IsDownloadActivated = false,
+                LicenseDownloadId = 0,
+                ItemWeight = itemWeight,
+                RentalStartDateUtc = rentalStartDate,
+                RentalEndDateUtc = rentalEndDate
+            };
+
+            await _orderService.InsertOrderItemAsync(orderItem);
+
+            //adjust inventory
+            await _productService.AdjustInventoryAsync(product, -orderItem.Quantity, orderItem.AttributesXml,
+                string.Format(await _localizationService.GetResourceAsync("Admin.StockQuantityHistory.Messages.EditOrder"), order.Id));
 
             //update order totals
             var updateOrderParameters = new UpdateOrderParameters(order, orderItem)
             {
-                PriceInclTax = unitPriceInclTax,
-                PriceExclTax = unitPriceExclTax,
-                DiscountAmountInclTax = discountInclTax,
-                DiscountAmountExclTax = discountExclTax,
-                SubTotalInclTax = priceInclTax,
-                SubTotalExclTax = priceExclTax,
-                Quantity = quantity
+                PriceInclTax = model.UnitPriceInclTax,
+                PriceExclTax = model.UnitPriceExclTax,
+                SubTotalInclTax = model.SubTotalInclTax,
+                SubTotalExclTax = model.SubTotalExclTax,
+                Quantity = model.Quantity
             };
-            _orderProcessingService.UpdateOrderTotals(updateOrderParameters);
+            await _orderProcessingService.UpdateOrderTotalsAsync(updateOrderParameters);
 
             //add a note
-            _orderService.InsertOrderNote(new OrderNote
+            await _orderService.InsertOrderNoteAsync(new OrderNote
             {
                 OrderId = order.Id,
-                Note = "Order item has been edited",
+                Note = "A new order item has been added",
                 DisplayToCustomer = false,
                 CreatedOnUtc = DateTime.UtcNow
             });
 
-            LogEditOrder(order.Id);
+            await LogEditOrderAsync(order.Id);
 
-            //prepare model
-            var model = _orderModelFactory.PrepareOrderModel(null, order);
+            //gift cards
+            if (product.IsGiftCard)
+            {
+                _productAttributeParser.GetGiftCardAttribute(
+                    attributesXml, out var recipientName, out var recipientEmail, out var senderName, out var senderEmail, out var giftCardMessage);
 
+                for (var i = 0; i < orderItem.Quantity; i++)
+                {
+                    var gc = new GiftCard
+                    {
+                        GiftCardType = product.GiftCardType,
+                        PurchasedWithOrderItemId = orderItem.Id,
+                        Amount = model.UnitPriceExclTax,
+                        IsGiftCardActivated = false,
+                        GiftCardCouponCode = _giftCardService.GenerateGiftCardCode(),
+                        RecipientName = recipientName,
+                        RecipientEmail = recipientEmail,
+                        SenderName = senderName,
+                        SenderEmail = senderEmail,
+                        Message = giftCardMessage,
+                        IsRecipientNotified = false,
+                        CreatedOnUtc = DateTime.UtcNow
+                    };
+                    await _giftCardService.InsertGiftCardAsync(gc);
+                }
+            }
+
+            //redirect to order details page
             foreach (var warning in updateOrderParameters.Warnings)
                 _notificationService.WarningNotification(warning);
 
-            //selected panel
-            SaveSelectedPanelName("order-products", persistForTheNextRequest: false);
-
-            return View(model);
+            //selected card
+            SaveSelectedCardName("order-products");
+            return RedirectToAction("Edit", new { id = order.Id });
         }
 
-        [HttpPost, ActionName("Edit")]
-        [FormValueRequired(FormValueRequirement.StartsWith, "btnDeleteOrderItem")]
-        public virtual IActionResult DeleteOrderItem(int id, IFormCollection form)
+        //prepare model
+        model.Warnings.AddRange(warnings);
+
+        return View(model);
+    }
+
+    #endregion
+
+    #endregion
+
+    #region Addresses
+
+    [CheckPermission(StandardPermission.Orders.ORDERS_CREATE_EDIT_DELETE)]
+    public virtual async Task<IActionResult> AddressEdit(int addressId, int orderId)
+    {
+        //try to get an order with the specified id
+        var order = await _orderService.GetOrderByIdAsync(orderId);
+        if (order == null)
+            return RedirectToAction("List");
+
+        //a vendor does not have access to this functionality
+        if (await _workContext.GetCurrentVendorAsync() != null)
+            return RedirectToAction("Edit", "Order", new { id = orderId });
+
+        //try to get an address with the specified id
+        var address = await _addressService.GetAddressByIdAsync(addressId)
+            ?? throw new ArgumentException("No address found with the specified id", nameof(addressId));
+
+        //prepare model
+        var model = await _orderModelFactory.PrepareOrderAddressModelAsync(new OrderAddressModel(), order, address);
+
+        return View(model);
+    }
+
+    [HttpPost]
+    [CheckPermission(StandardPermission.Orders.ORDERS_CREATE_EDIT_DELETE)]
+    public virtual async Task<IActionResult> AddressEdit(OrderAddressModel model, IFormCollection form)
+    {
+        //try to get an order with the specified id
+        var order = await _orderService.GetOrderByIdAsync(model.OrderId);
+        if (order == null)
+            return RedirectToAction("List");
+
+        //a vendor does not have access to this functionality
+        if (await _workContext.GetCurrentVendorAsync() != null)
+            return RedirectToAction("Edit", new { id = order.Id });
+
+        //try to get an address with the specified id
+        var address = await _addressService.GetAddressByIdAsync(model.Address.Id)
+            ?? throw new ArgumentException("No address found with the specified id");
+
+        //custom address attributes
+        var customAttributes = await _addressAttributeParser.ParseCustomAttributesAsync(form, NopCommonDefaults.AddressAttributeControlName);
+        var customAttributeWarnings = await _addressAttributeParser.GetAttributeWarningsAsync(customAttributes);
+        foreach (var error in customAttributeWarnings)
         {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageOrders))
-                return AccessDeniedView();
-
-            //try to get an order with the specified id
-            var order = _orderService.GetOrderById(id);
-            if (order == null)
-                return RedirectToAction("List");
-
-            //a vendor does not have access to this functionality
-            if (_workContext.CurrentVendor != null)
-                return RedirectToAction("Edit", "Order", new { id });
-
-            //get order item identifier
-            var orderItemId = 0;
-            foreach (var formValue in form.Keys)
-                if (formValue.StartsWith("btnDeleteOrderItem", StringComparison.InvariantCultureIgnoreCase))
-                    orderItemId = Convert.ToInt32(formValue.Substring("btnDeleteOrderItem".Length));
-
-            var orderItem = _orderService.GetOrderItemById(orderItemId)
-                ?? throw new ArgumentException("No order item found with the specified id");
-
-            if (_giftCardService.GetGiftCardsByPurchasedWithOrderItemId(orderItem.Id).Any())
-            {
-                //we cannot delete an order item with associated gift cards
-                //a store owner should delete them first
-
-                //prepare model
-                var model = _orderModelFactory.PrepareOrderModel(null, order);
-
-                _notificationService.ErrorNotification(_localizationService.GetResource("Admin.Orders.OrderItem.DeleteAssociatedGiftCardRecordError"));
-
-                //selected panel
-                SaveSelectedPanelName("order-products", persistForTheNextRequest: false);
-
-                return View(model);
-            }
-            else
-            {
-                var product = _productService.GetProductById(orderItem.ProductId);
-
-                //adjust inventory
-                _productService.AdjustInventory(product, orderItem.Quantity, orderItem.AttributesXml,
-                    string.Format(_localizationService.GetResource("Admin.StockQuantityHistory.Messages.DeleteOrderItem"), order.Id));
-
-                //delete item
-                _orderService.DeleteOrderItem(orderItem);
-
-                //update order totals
-                var updateOrderParameters = new UpdateOrderParameters(order, orderItem);
-                _orderProcessingService.UpdateOrderTotals(updateOrderParameters);
-
-                //add a note
-                _orderService.InsertOrderNote(new OrderNote
-                {
-                    OrderId = order.Id,
-                    Note = "Order item has been deleted",
-                    DisplayToCustomer = false,
-                    CreatedOnUtc = DateTime.UtcNow
-                });
-
-                LogEditOrder(order.Id);
-
-                //prepare model
-                var model = _orderModelFactory.PrepareOrderModel(null, order);
-
-                foreach (var warning in updateOrderParameters.Warnings)
-                    _notificationService.WarningNotification(warning);
-
-                //selected panel
-                SaveSelectedPanelName("order-products", persistForTheNextRequest: false);
-
-                return View(model);
-            }
+            ModelState.AddModelError(string.Empty, error);
         }
 
-        [HttpPost, ActionName("Edit")]
-        [FormValueRequired(FormValueRequirement.StartsWith, "btnResetDownloadCount")]
-        public virtual IActionResult ResetDownloadCount(int id, IFormCollection form)
+        if (ModelState.IsValid)
         {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageOrders))
-                return AccessDeniedView();
+            address = model.Address.ToEntity(address);
+            address.CustomAttributes = customAttributes;
+            await _addressService.UpdateAddressAsync(address);
 
-            //try to get an order with the specified id
-            var order = _orderService.GetOrderById(id);
-            if (order == null)
-                return RedirectToAction("List");
-
-            //get order item identifier
-            var orderItemId = 0;
-            foreach (var formValue in form.Keys)
-                if (formValue.StartsWith("btnResetDownloadCount", StringComparison.InvariantCultureIgnoreCase))
-                    orderItemId = Convert.ToInt32(formValue.Substring("btnResetDownloadCount".Length));
-
-            var orderItem = _orderService.GetOrderItemById(orderItemId)
-                ?? throw new ArgumentException("No order item found with the specified id");
-
-            //ensure a vendor has access only to his products 
-            if (_workContext.CurrentVendor != null && !HasAccessToProduct(orderItem))
-                return RedirectToAction("List");
-
-            orderItem.DownloadCount = 0;
-            _orderService.UpdateOrderItem(orderItem);
-            LogEditOrder(order.Id);
-
-            //prepare model
-            var model = _orderModelFactory.PrepareOrderModel(null, order);
-
-            //selected panel
-            SaveSelectedPanelName("order-products", persistForTheNextRequest: false);
-
-            return View(model);
-        }
-
-        [HttpPost, ActionName("Edit")]
-        [FormValueRequired(FormValueRequirement.StartsWith, "btnPvActivateDownload")]
-        public virtual IActionResult ActivateDownloadItem(int id, IFormCollection form)
-        {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageOrders))
-                return AccessDeniedView();
-
-            //try to get an order with the specified id
-            var order = _orderService.GetOrderById(id);
-            if (order == null)
-                return RedirectToAction("List");
-
-            //get order item identifier
-            var orderItemId = 0;
-            foreach (var formValue in form.Keys)
-                if (formValue.StartsWith("btnPvActivateDownload", StringComparison.InvariantCultureIgnoreCase))
-                    orderItemId = Convert.ToInt32(formValue.Substring("btnPvActivateDownload".Length));
-
-            var orderItem = _orderService.GetOrderItemById(orderItemId)
-                ?? throw new ArgumentException("No order item found with the specified id");
-
-            //ensure a vendor has access only to his products 
-            if (_workContext.CurrentVendor != null && !HasAccessToProduct(orderItem))
-                return RedirectToAction("List");
-
-            orderItem.IsDownloadActivated = !orderItem.IsDownloadActivated;
-            _orderService.UpdateOrderItem(orderItem);
-
-            LogEditOrder(order.Id);
-
-            //prepare model
-            var model = _orderModelFactory.PrepareOrderModel(null, order);
-
-            //selected panel
-            SaveSelectedPanelName("order-products", persistForTheNextRequest: false);
-            return View(model);
-        }
-
-        public virtual IActionResult UploadLicenseFilePopup(int id, int orderItemId)
-        {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageOrders))
-                return AccessDeniedView();
-
-            //try to get an order with the specified id
-            var order = _orderService.GetOrderById(id);
-            if (order == null)
-                return RedirectToAction("List");
-
-            //try to get an order item with the specified id
-            var orderItem = _orderService.GetOrderItemById(orderItemId)
-                ?? throw new ArgumentException("No order item found with the specified id");
-
-            var product = _productService.GetProductById(orderItem.ProductId)
-                ?? throw new ArgumentException("No product found with the specified order item id");
-
-            if (!product.IsDownload)
-                throw new ArgumentException("Product is not downloadable");
-
-            //ensure a vendor has access only to his products 
-            if (_workContext.CurrentVendor != null && !HasAccessToProduct(orderItem))
-                return RedirectToAction("List");
-
-            //prepare model
-            var model = _orderModelFactory.PrepareUploadLicenseModel(new UploadLicenseModel(), order, orderItem);
-
-            return View(model);
-        }
-
-        [HttpPost]
-        [FormValueRequired("uploadlicense")]
-        public virtual IActionResult UploadLicenseFilePopup(UploadLicenseModel model)
-        {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageOrders))
-                return AccessDeniedView();
-
-            //try to get an order with the specified id
-            var order = _orderService.GetOrderById(model.OrderId);
-            if (order == null)
-                return RedirectToAction("List");
-
-            var orderItem = _orderService.GetOrderItemById(model.OrderItemId)
-                ?? throw new ArgumentException("No order item found with the specified id");
-
-            //ensure a vendor has access only to his products 
-            if (_workContext.CurrentVendor != null && !HasAccessToProduct(orderItem))
-                return RedirectToAction("List");
-
-            //attach license
-            if (model.LicenseDownloadId > 0)
-                orderItem.LicenseDownloadId = model.LicenseDownloadId;
-            else
-                orderItem.LicenseDownloadId = null;
-
-            _orderService.UpdateOrderItem(orderItem);
-
-            LogEditOrder(order.Id);
-
-            //success
-            ViewBag.RefreshPage = true;
-
-            return View(model);
-        }
-
-        [HttpPost, ActionName("UploadLicenseFilePopup")]
-        [FormValueRequired("deletelicense")]
-        public virtual IActionResult DeleteLicenseFilePopup(UploadLicenseModel model)
-        {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageOrders))
-                return AccessDeniedView();
-
-            //try to get an order with the specified id
-            var order = _orderService.GetOrderById(model.OrderId);
-            if (order == null)
-                return RedirectToAction("List");
-
-            var orderItem = _orderService.GetOrderItemById(model.OrderItemId)
-                ?? throw new ArgumentException("No order item found with the specified id");
-
-            //ensure a vendor has access only to his products 
-            if (_workContext.CurrentVendor != null && !HasAccessToProduct(orderItem))
-                return RedirectToAction("List");
-
-            //attach license
-            orderItem.LicenseDownloadId = null;
-
-            _orderService.UpdateOrderItem(orderItem);
-
-            LogEditOrder(order.Id);
-
-            //success
-            ViewBag.RefreshPage = true;
-
-            return View(model);
-        }
-
-        public virtual IActionResult AddProductToOrder(int orderId)
-        {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageOrders))
-                return AccessDeniedView();
-
-            //try to get an order with the specified id
-            var order = _orderService.GetOrderById(orderId);
-            if (order == null)
-                return RedirectToAction("List");
-
-            //a vendor does not have access to this functionality
-            if (_workContext.CurrentVendor != null)
-                return RedirectToAction("Edit", "Order", new { id = orderId });
-
-            //prepare model
-            var model = _orderModelFactory.PrepareAddProductToOrderSearchModel(new AddProductToOrderSearchModel(), order);
-
-            return View(model);
-        }
-
-        [HttpPost]
-        public virtual IActionResult AddProductToOrder(AddProductToOrderSearchModel searchModel)
-        {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageOrders))
-                return AccessDeniedDataTablesJson();
-
-            //try to get an order with the specified id
-            var order = _orderService.GetOrderById(searchModel.OrderId)
-                ?? throw new ArgumentException("No order found with the specified id");
-
-            //a vendor does not have access to this functionality
-            if (_workContext.CurrentVendor != null)
-                return Content(string.Empty);
-
-            //prepare model
-            var model = _orderModelFactory.PrepareAddProductToOrderListModel(searchModel, order);
-
-            return Json(model);
-        }
-
-        public virtual IActionResult AddProductToOrderDetails(int orderId, int productId)
-        {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageOrders))
-                return AccessDeniedView();
-
-            //try to get an order with the specified id
-            var order = _orderService.GetOrderById(orderId)
-                ?? throw new ArgumentException("No order found with the specified id");
-
-            //try to get a product with the specified id
-            var product = _productService.GetProductById(productId)
-                ?? throw new ArgumentException("No product found with the specified id");
-
-            //a vendor does not have access to this functionality
-            if (_workContext.CurrentVendor != null)
-                return RedirectToAction("Edit", "Order", new { id = orderId });
-
-            //prepare model
-            var model = _orderModelFactory.PrepareAddProductToOrderModel(new AddProductToOrderModel(), order, product);
-
-            return View(model);
-        }
-
-        [HttpPost]
-        public virtual IActionResult AddProductToOrderDetails(int orderId, int productId, IFormCollection form)
-        {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageOrders))
-                return AccessDeniedView();
-
-            //a vendor does not have access to this functionality
-            if (_workContext.CurrentVendor != null)
-                return RedirectToAction("Edit", "Order", new { id = orderId });
-
-            //try to get an order with the specified id
-            var order = _orderService.GetOrderById(orderId)
-                ?? throw new ArgumentException("No order found with the specified id");
-
-            //try to get a product with the specified id
-            var product = _productService.GetProductById(productId)
-                ?? throw new ArgumentException("No product found with the specified id");
-
-            //try to get a customer with the specified id
-            var customer = _customerService.GetCustomerById(order.CustomerId)
-                ?? throw new ArgumentException("No customer found with the specified id");
-
-            //basic properties
-            decimal.TryParse(form["UnitPriceInclTax"], out var unitPriceInclTax);
-            decimal.TryParse(form["UnitPriceExclTax"], out var unitPriceExclTax);
-            int.TryParse(form["Quantity"], out var quantity);
-            decimal.TryParse(form["SubTotalInclTax"], out var priceInclTax);
-            decimal.TryParse(form["SubTotalExclTax"], out var priceExclTax);
-
-            //warnings
-            var warnings = new List<string>();
-
-            //attributes
-            var attributesXml = _productAttributeParser.ParseProductAttributes(product, form, warnings);
-
-            //gift cards
-            attributesXml = AddGiftCards(form, product, attributesXml, out var recipientName, out var recipientEmail, out var senderName, out var senderEmail, out var giftCardMessage);
-
-            //rental product
-            _productAttributeParser.ParseRentalDates(product, form, out var rentalStartDate, out var rentalEndDate);
-
-            //warnings
-            warnings.AddRange(_shoppingCartService.GetShoppingCartItemAttributeWarnings(customer, ShoppingCartType.ShoppingCart, product, quantity, attributesXml));
-            warnings.AddRange(_shoppingCartService.GetShoppingCartItemGiftCardWarnings(ShoppingCartType.ShoppingCart, product, attributesXml));
-            warnings.AddRange(_shoppingCartService.GetRentalProductWarnings(product, rentalStartDate, rentalEndDate));
-            if (!warnings.Any())
-            {
-                //no errors
-
-                //attributes
-                var attributeDescription = _productAttributeFormatter.FormatAttributes(product, attributesXml, customer);
-
-                //weight
-                var itemWeight = _shippingService.GetShoppingCartItemWeight(product, attributesXml);
-
-                //save item
-                var orderItem = new OrderItem
-                {
-                    OrderItemGuid = Guid.NewGuid(),
-                    OrderId = order.Id,
-                    ProductId = product.Id,
-                    UnitPriceInclTax = unitPriceInclTax,
-                    UnitPriceExclTax = unitPriceExclTax,
-                    PriceInclTax = priceInclTax,
-                    PriceExclTax = priceExclTax,
-                    OriginalProductCost = _priceCalculationService.GetProductCost(product, attributesXml),
-                    AttributeDescription = attributeDescription,
-                    AttributesXml = attributesXml,
-                    Quantity = quantity,
-                    DiscountAmountInclTax = decimal.Zero,
-                    DiscountAmountExclTax = decimal.Zero,
-                    DownloadCount = 0,
-                    IsDownloadActivated = false,
-                    LicenseDownloadId = 0,
-                    ItemWeight = itemWeight,
-                    RentalStartDateUtc = rentalStartDate,
-                    RentalEndDateUtc = rentalEndDate
-                };
-
-                _orderService.InsertOrderItem(orderItem);                
-
-                //adjust inventory
-                _productService.AdjustInventory(product, -orderItem.Quantity, orderItem.AttributesXml,
-                    string.Format(_localizationService.GetResource("Admin.StockQuantityHistory.Messages.EditOrder"), order.Id));
-
-                //update order totals
-                var updateOrderParameters = new UpdateOrderParameters(order, orderItem)
-                {
-                    PriceInclTax = unitPriceInclTax,
-                    PriceExclTax = unitPriceExclTax,
-                    SubTotalInclTax = priceInclTax,
-                    SubTotalExclTax = priceExclTax,
-                    Quantity = quantity
-                };
-                _orderProcessingService.UpdateOrderTotals(updateOrderParameters);
-
-                //add a note
-                _orderService.InsertOrderNote(new OrderNote
-                {
-                    OrderId = order.Id,
-                    Note = "A new order item has been added",
-                    DisplayToCustomer = false,
-                    CreatedOnUtc = DateTime.UtcNow
-                });
-
-                LogEditOrder(order.Id);
-
-                //gift cards
-                if (product.IsGiftCard)
-                {
-                    for (var i = 0; i < orderItem.Quantity; i++)
-                    {
-                        var gc = new GiftCard
-                        {
-                            GiftCardType = product.GiftCardType,
-                            PurchasedWithOrderItemId = orderItem.Id,
-                            Amount = unitPriceExclTax,
-                            IsGiftCardActivated = false,
-                            GiftCardCouponCode = _giftCardService.GenerateGiftCardCode(),
-                            RecipientName = recipientName,
-                            RecipientEmail = recipientEmail,
-                            SenderName = senderName,
-                            SenderEmail = senderEmail,
-                            Message = giftCardMessage,
-                            IsRecipientNotified = false,
-                            CreatedOnUtc = DateTime.UtcNow
-                        };
-                        _giftCardService.InsertGiftCard(gc);
-                    }
-                }
-
-                //redirect to order details page
-                foreach (var warning in updateOrderParameters.Warnings)
-                    _notificationService.WarningNotification(warning);
-
-                //selected panel
-                SaveSelectedPanelName("order-products");
-                return RedirectToAction("Edit", "Order", new { id = order.Id });
-            }
-
-            //prepare model
-            var model = _orderModelFactory.PrepareAddProductToOrderModel(new AddProductToOrderModel(), order, product);
-            model.Warnings.AddRange(warnings);
-
-            return View(model);
-        }
-
-        #endregion
-
-        #endregion
-
-        #region Addresses
-
-        public virtual IActionResult AddressEdit(int addressId, int orderId)
-        {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageOrders))
-                return AccessDeniedView();
-
-            //try to get an order with the specified id
-            var order = _orderService.GetOrderById(orderId);
-            if (order == null)
-                return RedirectToAction("List");
-
-            //a vendor does not have access to this functionality
-            if (_workContext.CurrentVendor != null)
-                return RedirectToAction("Edit", "Order", new { id = orderId });
-
-            //try to get an address with the specified id
-            var address = _addressService.GetAddressById(addressId)
-                ?? throw new ArgumentException("No address found with the specified id", nameof(addressId));
-
-            //prepare model
-            var model = _orderModelFactory.PrepareOrderAddressModel(new OrderAddressModel(), order, address);
-
-            return View(model);
-        }
-
-        [HttpPost]
-        public virtual IActionResult AddressEdit(OrderAddressModel model, IFormCollection form)
-        {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageOrders))
-                return AccessDeniedView();
-
-            //try to get an order with the specified id
-            var order = _orderService.GetOrderById(model.OrderId);
-            if (order == null)
-                return RedirectToAction("List");
-
-            //a vendor does not have access to this functionality
-            if (_workContext.CurrentVendor != null)
-                return RedirectToAction("Edit", "Order", new { id = order.Id });
-
-            //try to get an address with the specified id
-            var address = _addressService.GetAddressById(model.Address.Id)
-                ?? throw new ArgumentException("No address found with the specified id");
-
-            //custom address attributes
-            var customAttributes = _addressAttributeParser.ParseCustomAddressAttributes(form);
-            var customAttributeWarnings = _addressAttributeParser.GetAttributeWarnings(customAttributes);
-            foreach (var error in customAttributeWarnings)
-            {
-                ModelState.AddModelError(string.Empty, error);
-            }
-
-            if (ModelState.IsValid)
-            {
-                address = model.Address.ToEntity(address);
-                address.CustomAttributes = customAttributes;
-                _addressService.UpdateAddress(address);
-
-                //add a note
-                _orderService.InsertOrderNote(new OrderNote
-                {
-                    OrderId = order.Id,
-                    Note = "Address has been edited",
-                    DisplayToCustomer = false,
-                    CreatedOnUtc = DateTime.UtcNow
-                });
-
-                LogEditOrder(order.Id);
-
-                return RedirectToAction("AddressEdit", new { addressId = model.Address.Id, orderId = model.OrderId });
-            }
-
-            //prepare model
-            model = _orderModelFactory.PrepareOrderAddressModel(model, order, address);
-
-            //if we got this far, something failed, redisplay form
-            return View(model);
-        }
-
-        #endregion
-
-        #region Shipments
-
-        public virtual IActionResult ShipmentList()
-        {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageOrders))
-                return AccessDeniedView();
-
-            //prepare model
-            var model = _orderModelFactory.PrepareShipmentSearchModel(new ShipmentSearchModel());
-
-            return View(model);
-        }
-
-        [HttpPost]
-        public virtual IActionResult ShipmentListSelect(ShipmentSearchModel searchModel)
-        {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageOrders))
-                return AccessDeniedDataTablesJson();
-
-            //prepare model
-            var model = _orderModelFactory.PrepareShipmentListModel(searchModel);
-
-            return Json(model);
-        }
-
-        [HttpPost]
-        public virtual IActionResult ShipmentsByOrder(OrderShipmentSearchModel searchModel)
-        {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageOrders))
-                return AccessDeniedDataTablesJson();
-
-            //try to get an order with the specified id
-            var order = _orderService.GetOrderById(searchModel.OrderId)
-                ?? throw new ArgumentException("No order found with the specified id");
-
-            //a vendor should have access only to his products
-            if (_workContext.CurrentVendor != null && !HasAccessToOrder(order))
-                return Content(string.Empty);
-
-            //prepare model
-            var model = _orderModelFactory.PrepareOrderShipmentListModel(searchModel, order);
-
-            return Json(model);
-        }
-
-        [HttpPost]
-        public virtual IActionResult ShipmentsItemsByShipmentId(ShipmentItemSearchModel searchModel)
-        {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageOrders))
-                return AccessDeniedDataTablesJson();
-
-            //try to get a shipment with the specified id
-            var shipment = _shipmentService.GetShipmentById(searchModel.ShipmentId)
-                ?? throw new ArgumentException("No shipment found with the specified id");
-
-            //a vendor should have access only to his products
-            if (_workContext.CurrentVendor != null && !HasAccessToShipment(shipment))
-                return Content(string.Empty);
-
-            //try to get an order with the specified id
-            var order = _orderService.GetOrderById(shipment.OrderId)
-                ?? throw new ArgumentException("No order found with the specified id");
-
-            //a vendor should have access only to his products
-            if (_workContext.CurrentVendor != null && !HasAccessToOrder(order))
-                return Content(string.Empty);
-
-            //prepare model
-            searchModel.SetGridPageSize();
-            var model = _orderModelFactory.PrepareShipmentItemListModel(searchModel, shipment);
-
-            return Json(model);
-        }
-
-        public virtual IActionResult AddShipment(int id)
-        {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageOrders))
-                return AccessDeniedView();
-
-            //try to get an order with the specified id
-            var order = _orderService.GetOrderById(id);
-            if (order == null)
-                return RedirectToAction("List");
-
-            //a vendor should have access only to his products
-            if (_workContext.CurrentVendor != null && !HasAccessToOrder(order))
-                return RedirectToAction("List");
-
-            //prepare model
-            var model = _orderModelFactory.PrepareShipmentModel(new ShipmentModel(), null, order);
-
-            return View(model);
-        }
-
-        [HttpPost, ParameterBasedOnFormName("save-continue", "continueEditing")]
-        [FormValueRequired("save", "save-continue")]
-        public virtual IActionResult AddShipment(ShipmentModel model, IFormCollection form, bool continueEditing)
-        {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageOrders))
-                return AccessDeniedView();
-
-            //try to get an order with the specified id
-            var order = _orderService.GetOrderById(model.OrderId);
-            if (order == null)
-                return RedirectToAction("List");
-
-            //a vendor should have access only to his products
-            if (_workContext.CurrentVendor != null && !HasAccessToOrder(order))
-                return RedirectToAction("List");
-
-            var orderItems = _orderService.GetOrderItems(order.Id, isShipEnabled: true);
-            //a vendor should have access only to his products
-            if (_workContext.CurrentVendor != null)
-            {
-                orderItems = orderItems.Where(HasAccessToProduct).ToList();
-            }
-
-            var shipment = new Shipment
-            {
-                OrderId = order.Id,
-                TrackingNumber = model.TrackingNumber,
-                TotalWeight = null,
-                AdminComment = model.AdminComment,
-                CreatedOnUtc = DateTime.UtcNow
-            };
-
-            var shipmentItems = new List<ShipmentItem>();
-
-            decimal? totalWeight = null;
-
-            foreach (var orderItem in orderItems)
-            {
-                var product = _productService.GetProductById(orderItem.ProductId);
-
-                //ensure that this product can be shipped (have at least one item to ship)
-                var maxQtyToAdd = _orderService.GetTotalNumberOfItemsCanBeAddedToShipment(orderItem);
-                if (maxQtyToAdd <= 0)
-                    continue;
-
-                var qtyToAdd = 0; //parse quantity
-                foreach (var formKey in form.Keys)
-                    if (formKey.Equals($"qtyToAdd{orderItem.Id}", StringComparison.InvariantCultureIgnoreCase))
-                    {
-                        int.TryParse(form[formKey], out qtyToAdd);
-                        break;
-                    }
-
-                var warehouseId = 0;
-                if (product.ManageInventoryMethod == ManageInventoryMethod.ManageStock &&
-                    product.UseMultipleWarehouses)
-                {
-                    //multiple warehouses supported
-                    //warehouse is chosen by a store owner
-                    foreach (var formKey in form.Keys)
-                        if (formKey.Equals($"warehouse_{orderItem.Id}", StringComparison.InvariantCultureIgnoreCase))
-                        {
-                            int.TryParse(form[formKey], out warehouseId);
-                            break;
-                        }
-                }
-                else
-                {
-                    //multiple warehouses are not supported
-                    warehouseId = product.WarehouseId;
-                }
-
-                //validate quantity
-                if (qtyToAdd <= 0)
-                    continue;
-                if (qtyToAdd > maxQtyToAdd)
-                    qtyToAdd = maxQtyToAdd;
-
-                //ok. we have at least one item. let's create a shipment (if it does not exist)
-
-                var orderItemTotalWeight = orderItem.ItemWeight * qtyToAdd;
-                if (orderItemTotalWeight.HasValue)
-                {
-                    if (!totalWeight.HasValue)
-                        totalWeight = 0;
-                    totalWeight += orderItemTotalWeight.Value;
-                }
-
-                //create a shipment item
-                shipmentItems.Add(new ShipmentItem
-                {
-                    OrderItemId = orderItem.Id,
-                    Quantity = qtyToAdd,
-                    WarehouseId = warehouseId
-                });
-
-                var quantityWithReserved = _productService.GetTotalStockQuantity(product, true, warehouseId);
-                var quantityTotal = _productService.GetTotalStockQuantity(product, false, warehouseId);
-
-                //currently reserved in current stock
-                var quantityReserved = quantityTotal - quantityWithReserved;
-
-                //If the quantity of the reserve product in the warehouse does not coincide with the total quantity of goods in the basket, 
-                //it is necessary to redistribute the reserve to the warehouse
-                if (!(quantityReserved == qtyToAdd && quantityReserved == maxQtyToAdd))
-                    _productService.BalanceInventory(product, warehouseId, qtyToAdd);
-            }
-
-            //if we have at least one item in the shipment, then save it
-            if (shipmentItems.Any())
-            {
-                shipment.TotalWeight = totalWeight;
-                _shipmentService.InsertShipment(shipment);
-
-                foreach (var shipmentItem in shipmentItems)
-                {
-                    shipmentItem.ShipmentId = shipment.Id;
-                    _shipmentService.InsertShipmentItem(shipmentItem);
-                }
-
-                //add a note
-                _orderService.InsertOrderNote(new OrderNote
-                {
-                    OrderId = order.Id,
-                    Note = "A shipment has been added",
-                    DisplayToCustomer = false,
-                    CreatedOnUtc = DateTime.UtcNow
-                });
-
-                if(model.CanShip)
-                    _orderProcessingService.Ship(shipment, true);
-
-                if(model.CanShip && model.CanDeliver)
-                    _orderProcessingService.Deliver(shipment, true);
-
-                LogEditOrder(order.Id);
-                
-                _notificationService.SuccessNotification(_localizationService.GetResource("Admin.Orders.Shipments.Added"));
-                return continueEditing
-                        ? RedirectToAction("ShipmentDetails", new { id = shipment.Id })
-                        : RedirectToAction("Edit", new { id = model.OrderId });
-            }
-
-            _notificationService.ErrorNotification(_localizationService.GetResource("Admin.Orders.Shipments.NoProductsSelected"));
-
-            return RedirectToAction("AddShipment", model);
-        }
-
-        public virtual IActionResult ShipmentDetails(int id)
-        {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageOrders))
-                return AccessDeniedView();
-
-            //try to get a shipment with the specified id
-            var shipment = _shipmentService.GetShipmentById(id);
-            if (shipment == null)
-                return RedirectToAction("List");
-
-            //a vendor should have access only to his products
-            if (_workContext.CurrentVendor != null && !HasAccessToShipment(shipment))
-                return RedirectToAction("List");
-
-            //prepare model
-            var model = _orderModelFactory.PrepareShipmentModel(null, shipment, null);
-
-            return View(model);
-        }
-
-        [HttpPost]
-        public virtual IActionResult DeleteShipment(int id)
-        {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageOrders))
-                return AccessDeniedView();
-
-            //try to get a shipment with the specified id
-            var shipment = _shipmentService.GetShipmentById(id);
-            if (shipment == null)
-                return RedirectToAction("List");
-
-            //a vendor should have access only to his products
-            if (_workContext.CurrentVendor != null && !HasAccessToShipment(shipment))
-                return RedirectToAction("List");
-            
-            foreach (var shipmentItem in _shipmentService.GetShipmentItemsByShipmentId(shipment.Id))
-            {
-                var orderItem = _orderService.GetOrderItemById(shipmentItem.OrderItemId);
-                if (orderItem == null)
-                    continue;
-
-                var product = _productService.GetProductById(orderItem.ProductId);
-
-                _productService.ReverseBookedInventory(product, shipmentItem,
-                    string.Format(_localizationService.GetResource("Admin.StockQuantityHistory.Messages.DeleteShipment"), shipment.OrderId));
-            }
-
-            var orderId = shipment.OrderId;
-            _shipmentService.DeleteShipment(shipment);
-
-            var order = _orderService.GetOrderById(orderId);
             //add a note
-            _orderService.InsertOrderNote(new OrderNote
+            await _orderService.InsertOrderNoteAsync(new OrderNote
             {
                 OrderId = order.Id,
-                Note = "A shipment has been deleted",
+                Note = "Address has been edited",
                 DisplayToCustomer = false,
                 CreatedOnUtc = DateTime.UtcNow
             });
 
-            LogEditOrder(order.Id);
+            await LogEditOrderAsync(order.Id);
 
-            _notificationService.SuccessNotification(_localizationService.GetResource("Admin.Orders.Shipments.Deleted"));
-            return RedirectToAction("Edit", new { id = orderId });
+            _notificationService.SuccessNotification(await _localizationService.GetResourceAsync("Admin.Customers.Customers.Addresses.Updated"));
+
+            return RedirectToAction("AddressEdit", new { addressId = model.Address.Id, orderId = model.OrderId });
         }
 
-        [HttpPost, ActionName("ShipmentDetails")]
-        [FormValueRequired("settrackingnumber")]
-        public virtual IActionResult SetTrackingNumber(ShipmentModel model)
+        //prepare model
+        model = await _orderModelFactory.PrepareOrderAddressModelAsync(model, order, address);
+
+        //if we got this far, something failed, redisplay form
+        return View(model);
+    }
+
+    #endregion
+
+    #region Shipments
+
+    [CheckPermission(StandardPermission.Orders.SHIPMENTS_VIEW)]
+    public virtual async Task<IActionResult> ShipmentList()
+    {
+        //prepare model
+        var model = await _orderModelFactory.PrepareShipmentSearchModelAsync(new ShipmentSearchModel());
+
+        return View(model);
+    }
+
+    [HttpPost]
+    [CheckPermission(StandardPermission.Orders.SHIPMENTS_VIEW)]
+    public virtual async Task<IActionResult> ShipmentListSelect(ShipmentSearchModel searchModel)
+    {
+        //prepare model
+        var model = await _orderModelFactory.PrepareShipmentListModelAsync(searchModel);
+
+        return Json(model);
+    }
+
+    [HttpPost]
+    [CheckPermission(StandardPermission.Orders.SHIPMENTS_VIEW)]
+    public virtual async Task<IActionResult> ShipmentsByOrder(OrderShipmentSearchModel searchModel)
+    {
+        //try to get an order with the specified id
+        var order = await _orderService.GetOrderByIdAsync(searchModel.OrderId)
+            ?? throw new ArgumentException("No order found with the specified id");
+
+        //a vendor should have access only to his products
+        if (await _workContext.GetCurrentVendorAsync() != null && !await HasAccessToOrderAsync(order))
+            return Content(string.Empty);
+
+        //prepare model
+        var model = await _orderModelFactory.PrepareOrderShipmentListModelAsync(searchModel, order);
+
+        return Json(model);
+    }
+
+    [HttpPost]
+    [CheckPermission(StandardPermission.Orders.SHIPMENTS_VIEW)]
+    public virtual async Task<IActionResult> ShipmentsItemsByShipmentId(ShipmentItemSearchModel searchModel)
+    {
+        //try to get a shipment with the specified id
+        var shipment = await _shipmentService.GetShipmentByIdAsync(searchModel.ShipmentId)
+            ?? throw new ArgumentException("No shipment found with the specified id");
+
+        //a vendor should have access only to his products
+        var currentVendor = await _workContext.GetCurrentVendorAsync();
+        if (currentVendor != null && !await HasAccessToShipmentAsync(shipment))
+            return Content(string.Empty);
+
+        //try to get an order with the specified id
+        var order = await _orderService.GetOrderByIdAsync(shipment.OrderId)
+            ?? throw new ArgumentException("No order found with the specified id");
+
+        //a vendor should have access only to his products
+        if (currentVendor != null && !await HasAccessToOrderAsync(order))
+            return Content(string.Empty);
+
+        //prepare model
+        searchModel.SetGridPageSize();
+        var model = await _orderModelFactory.PrepareShipmentItemListModelAsync(searchModel, shipment);
+
+        return Json(model);
+    }
+
+    [CheckPermission(StandardPermission.Orders.SHIPMENTS_CREATE_EDIT_DELETE)]
+    public virtual async Task<IActionResult> AddShipment(int id)
+    {
+        //try to get an order with the specified id
+        var order = await _orderService.GetOrderByIdAsync(id);
+        if (order == null)
+            return RedirectToAction("List");
+
+        //a vendor should have access only to his products
+        if (await _workContext.GetCurrentVendorAsync() != null && !await HasAccessToOrderAsync(order))
+            return RedirectToAction("List");
+
+        //prepare model
+        var model = await _orderModelFactory.PrepareShipmentModelAsync(new ShipmentModel(), null, order);
+
+        return View(model);
+    }
+
+    [HttpPost, ParameterBasedOnFormName("save-continue", "continueEditing")]
+    [FormValueRequired("save", "save-continue")]
+    [CheckPermission(StandardPermission.Orders.SHIPMENTS_CREATE_EDIT_DELETE)]
+    public virtual async Task<IActionResult> AddShipment(ShipmentModel model, IFormCollection form, bool continueEditing)
+    {
+        //try to get an order with the specified id
+        var order = await _orderService.GetOrderByIdAsync(model.OrderId);
+        if (order == null)
+            return RedirectToAction("List");
+
+        //a vendor should have access only to his products
+        var currentVendor = await _workContext.GetCurrentVendorAsync();
+        if (currentVendor != null && !await HasAccessToOrderAsync(order))
+            return RedirectToAction("List");
+
+        var orderItems = await _orderService.GetOrderItemsAsync(order.Id, isShipEnabled: true);
+        //a vendor should have access only to his products
+        if (currentVendor != null)
         {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageOrders))
-                return AccessDeniedView();
-
-            //try to get a shipment with the specified id
-            var shipment = _shipmentService.GetShipmentById(model.Id);
-            if (shipment == null)
-                return RedirectToAction("List");
-
-            //a vendor should have access only to his products
-            if (_workContext.CurrentVendor != null && !HasAccessToShipment(shipment))
-                return RedirectToAction("List");
-
-            shipment.TrackingNumber = model.TrackingNumber;
-            _shipmentService.UpdateShipment(shipment);
-
-            return RedirectToAction("ShipmentDetails", new { id = shipment.Id });
+            orderItems = await orderItems.WhereAwait(HasAccessToProductAsync).ToListAsync();
         }
 
-        [HttpPost, ActionName("ShipmentDetails")]
-        [FormValueRequired("setadmincomment")]
-        public virtual IActionResult SetShipmentAdminComment(ShipmentModel model)
+        var shipment = new Shipment
         {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageOrders))
-                return AccessDeniedView();
+            OrderId = order.Id,
+            TrackingNumber = model.TrackingNumber,
+            TotalWeight = null,
+            AdminComment = model.AdminComment,
+            CreatedOnUtc = DateTime.UtcNow
+        };
 
-            //try to get a shipment with the specified id
-            var shipment = _shipmentService.GetShipmentById(model.Id);
-            if (shipment == null)
-                return RedirectToAction("List");
+        var shipmentItems = new List<ShipmentItem>();
 
-            //a vendor should have access only to his products
-            if (_workContext.CurrentVendor != null && !HasAccessToShipment(shipment))
-                return RedirectToAction("List");
+        decimal? totalWeight = null;
 
-            shipment.AdminComment = model.AdminComment;
-            _shipmentService.UpdateShipment(shipment);
-
-            return RedirectToAction("ShipmentDetails", new { id = shipment.Id });
-        }
-
-        [HttpPost, ActionName("ShipmentDetails")]
-        [FormValueRequired("setasshipped")]
-        public virtual IActionResult SetAsShipped(int id)
+        foreach (var orderItem in orderItems)
         {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageOrders))
-                return AccessDeniedView();
+            var product = await _productService.GetProductByIdAsync(orderItem.ProductId);
 
-            //try to get a shipment with the specified id
-            var shipment = _shipmentService.GetShipmentById(id);
-            if (shipment == null)
-                return RedirectToAction("List");
+            //ensure that this product can be shipped (have at least one item to ship)
+            var maxQtyToAdd = await _orderService.GetTotalNumberOfItemsCanBeAddedToShipmentAsync(orderItem);
+            if (maxQtyToAdd <= 0)
+                continue;
 
-            //a vendor should have access only to his products
-            if (_workContext.CurrentVendor != null && !HasAccessToShipment(shipment))
-                return RedirectToAction("List");
-
-            try
-            {
-                _orderProcessingService.Ship(shipment, true);
-                LogEditOrder(shipment.OrderId);
-                return RedirectToAction("ShipmentDetails", new { id = shipment.Id });
-            }
-            catch (Exception exc)
-            {
-                //error
-                _notificationService.ErrorNotification(exc);
-                return RedirectToAction("ShipmentDetails", new { id = shipment.Id });
-            }
-        }
-
-        [HttpPost, ActionName("ShipmentDetails")]
-        [FormValueRequired("saveshippeddate")]
-        public virtual IActionResult EditShippedDate(ShipmentModel model)
-        {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageOrders))
-                return AccessDeniedView();
-
-            //try to get a shipment with the specified id
-            var shipment = _shipmentService.GetShipmentById(model.Id);
-            if (shipment == null)
-                return RedirectToAction("List");
-
-            //a vendor should have access only to his products
-            if (_workContext.CurrentVendor != null && !HasAccessToShipment(shipment))
-                return RedirectToAction("List");
-
-            try
-            {
-                if (!model.ShippedDateUtc.HasValue)
+            var qtyToAdd = 0; //parse quantity
+            foreach (var formKey in form.Keys)
+                if (formKey.Equals($"qtyToAdd{orderItem.Id}", StringComparison.InvariantCultureIgnoreCase))
                 {
-                    throw new Exception("Enter shipped date");
+                    _ = int.TryParse(form[formKey], out qtyToAdd);
+                    break;
                 }
 
-                shipment.ShippedDateUtc = model.ShippedDateUtc;
-                _shipmentService.UpdateShipment(shipment);
-                return RedirectToAction("ShipmentDetails", new { id = shipment.Id });
-            }
-            catch (Exception exc)
+            var warehouseId = 0;
+            if (product.ManageInventoryMethod == ManageInventoryMethod.ManageStock &&
+                product.UseMultipleWarehouses)
             {
-                //error
-                _notificationService.ErrorNotification(exc);
-                return RedirectToAction("ShipmentDetails", new { id = shipment.Id });
+                //multiple warehouses supported
+                //warehouse is chosen by a store owner
+                foreach (var formKey in form.Keys)
+                    if (formKey.Equals($"warehouse_{orderItem.Id}", StringComparison.InvariantCultureIgnoreCase))
+                    {
+                        _ = int.TryParse(form[formKey], out warehouseId);
+                        break;
+                    }
             }
+            else
+            {
+                //multiple warehouses are not supported
+                warehouseId = product.WarehouseId;
+            }
+
+            //validate quantity
+            if (qtyToAdd <= 0)
+                continue;
+            if (qtyToAdd > maxQtyToAdd)
+                qtyToAdd = maxQtyToAdd;
+
+            //ok. we have at least one item. let's create a shipment (if it does not exist)
+
+            var orderItemTotalWeight = orderItem.ItemWeight * qtyToAdd;
+            if (orderItemTotalWeight.HasValue)
+            {
+                if (!totalWeight.HasValue)
+                    totalWeight = 0;
+                totalWeight += orderItemTotalWeight.Value;
+            }
+
+            //create a shipment item
+            shipmentItems.Add(new ShipmentItem
+            {
+                OrderItemId = orderItem.Id,
+                Quantity = qtyToAdd,
+                WarehouseId = warehouseId
+            });
         }
 
-        [HttpPost, ActionName("ShipmentDetails")]
-        [FormValueRequired("setasdelivered")]
-        public virtual IActionResult SetAsDelivered(int id)
+        //if we have at least one item in the shipment, then save it
+        if (shipmentItems.Any())
         {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageOrders))
-                return AccessDeniedView();
+            shipment.TotalWeight = totalWeight;
+            await _shipmentService.InsertShipmentAsync(shipment);
 
-            //try to get a shipment with the specified id
-            var shipment = _shipmentService.GetShipmentById(id);
-            if (shipment == null)
-                return RedirectToAction("List");
-
-            //a vendor should have access only to his products
-            if (_workContext.CurrentVendor != null && !HasAccessToShipment(shipment))
-                return RedirectToAction("List");
-
-            try
+            foreach (var shipmentItem in shipmentItems)
             {
-                _orderProcessingService.Deliver(shipment, true);
-                LogEditOrder(shipment.OrderId);
-                return RedirectToAction("ShipmentDetails", new { id = shipment.Id });
+                shipmentItem.ShipmentId = shipment.Id;
+                await _shipmentService.InsertShipmentItemAsync(shipmentItem);
             }
-            catch (Exception exc)
+
+            //add a note
+            await _orderService.InsertOrderNoteAsync(new OrderNote
             {
-                //error
-                _notificationService.ErrorNotification(exc);
-                return RedirectToAction("ShipmentDetails", new { id = shipment.Id });
-            }
+                OrderId = order.Id,
+                Note = "A shipment has been added",
+                DisplayToCustomer = false,
+                CreatedOnUtc = DateTime.UtcNow
+            });
+
+            await _eventPublisher.PublishAsync(new ShipmentCreatedEvent(shipment));
+
+            if (!string.IsNullOrWhiteSpace(shipment.TrackingNumber))
+                await _eventPublisher.PublishAsync(new ShipmentTrackingNumberSetEvent(shipment));
+
+            var canShip = !order.PickupInStore && model.CanShip;
+            if (canShip)
+                await _orderProcessingService.ShipAsync(shipment, true);
+
+            var canMarkAsReadyForPickup = order.PickupInStore && model.CanMarkAsReadyForPickup;
+            if (canMarkAsReadyForPickup)
+                await _orderProcessingService.ReadyForPickupAsync(shipment, true);
+
+            if ((canShip || canMarkAsReadyForPickup) && model.CanDeliver)
+                await _orderProcessingService.DeliverAsync(shipment, true);
+
+            await LogEditOrderAsync(order.Id);
+
+            _notificationService.SuccessNotification(await _localizationService.GetResourceAsync("Admin.Orders.Shipments.Added"));
+            return continueEditing
+                ? RedirectToAction("ShipmentDetails", new { id = shipment.Id })
+                : RedirectToAction("Edit", new { id = model.OrderId });
         }
 
-        [HttpPost, ActionName("ShipmentDetails")]
-        [FormValueRequired("savedeliverydate")]
-        public virtual IActionResult EditDeliveryDate(ShipmentModel model)
+        _notificationService.ErrorNotification(await _localizationService.GetResourceAsync("Admin.Orders.Shipments.NoProductsSelected"));
+
+        return RedirectToAction("AddShipment", model);
+    }
+
+    [CheckPermission(StandardPermission.Orders.SHIPMENTS_VIEW)]
+    public virtual async Task<IActionResult> ShipmentDetails(int id)
+    {
+        //try to get a shipment with the specified id
+        var shipment = await _shipmentService.GetShipmentByIdAsync(id);
+        if (shipment == null)
+            return RedirectToAction("List");
+
+        //a vendor should have access only to his products
+        if (await _workContext.GetCurrentVendorAsync() != null && !await HasAccessToShipmentAsync(shipment))
+            return RedirectToAction("List");
+
+        //prepare model
+        var model = await _orderModelFactory.PrepareShipmentModelAsync(null, shipment, null);
+
+        return View(model);
+    }
+
+    [HttpPost]
+    [CheckPermission(StandardPermission.Orders.SHIPMENTS_CREATE_EDIT_DELETE)]
+    public virtual async Task<IActionResult> DeleteShipment(int id)
+    {
+        //try to get a shipment with the specified id
+        var shipment = await _shipmentService.GetShipmentByIdAsync(id);
+        if (shipment == null)
+            return RedirectToAction("List");
+
+        //a vendor should have access only to his products
+        if (await _workContext.GetCurrentVendorAsync() != null && !await HasAccessToShipmentAsync(shipment))
+            return RedirectToAction("List");
+
+        foreach (var shipmentItem in await _shipmentService.GetShipmentItemsByShipmentIdAsync(shipment.Id))
         {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageOrders))
-                return AccessDeniedView();
+            var orderItem = await _orderService.GetOrderItemByIdAsync(shipmentItem.OrderItemId);
+            if (orderItem == null)
+                continue;
 
-            //try to get a shipment with the specified id
-            var shipment = _shipmentService.GetShipmentById(model.Id);
-            if (shipment == null)
-                return RedirectToAction("List");
+            var product = await _productService.GetProductByIdAsync(orderItem.ProductId);
 
-            //a vendor should have access only to his products
-            if (_workContext.CurrentVendor != null && !HasAccessToShipment(shipment))
-                return RedirectToAction("List");
-
-            try
-            {
-                if (!model.DeliveryDateUtc.HasValue)
-                {
-                    throw new Exception("Enter delivery date");
-                }
-
-                shipment.DeliveryDateUtc = model.DeliveryDateUtc;
-                _shipmentService.UpdateShipment(shipment);
-                return RedirectToAction("ShipmentDetails", new { id = shipment.Id });
-            }
-            catch (Exception exc)
-            {
-                //error
-                _notificationService.ErrorNotification(exc);
-                return RedirectToAction("ShipmentDetails", new { id = shipment.Id });
-            }
+            await _productService.ReverseBookedInventoryAsync(product, shipmentItem,
+                string.Format(await _localizationService.GetResourceAsync("Admin.StockQuantityHistory.Messages.DeleteShipment"), shipment.OrderId));
         }
 
-        public virtual IActionResult PdfPackagingSlip(int shipmentId)
+        var orderId = shipment.OrderId;
+        await _shipmentService.DeleteShipmentAsync(shipment);
+
+        var order = await _orderService.GetOrderByIdAsync(orderId);
+        //add a note
+        await _orderService.InsertOrderNoteAsync(new OrderNote
         {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageOrders))
-                return AccessDeniedView();
+            OrderId = order.Id,
+            Note = "A shipment has been deleted",
+            DisplayToCustomer = false,
+            CreatedOnUtc = DateTime.UtcNow
+        });
 
-            //try to get a shipment with the specified id
-            var shipment = _shipmentService.GetShipmentById(shipmentId);
-            if (shipment == null)
-                return RedirectToAction("List");
+        await LogEditOrderAsync(order.Id);
 
-            //a vendor should have access only to his products
-            if (_workContext.CurrentVendor != null && !HasAccessToShipment(shipment))
-                return RedirectToAction("List");
+        _notificationService.SuccessNotification(await _localizationService.GetResourceAsync("Admin.Orders.Shipments.Deleted"));
+        return RedirectToAction("Edit", new { id = orderId });
+    }
 
-            var shipments = new List<Shipment>
+    [HttpPost, ActionName("ShipmentDetails")]
+    [FormValueRequired("settrackingnumber")]
+    [CheckPermission(StandardPermission.Orders.SHIPMENTS_CREATE_EDIT_DELETE)]
+    public virtual async Task<IActionResult> SetTrackingNumber(ShipmentModel model)
+    {
+        //try to get a shipment with the specified id
+        var shipment = await _shipmentService.GetShipmentByIdAsync(model.Id);
+        if (shipment == null)
+            return RedirectToAction("List");
+
+        //a vendor should have access only to his products
+        if (await _workContext.GetCurrentVendorAsync() != null && !await HasAccessToShipmentAsync(shipment))
+            return RedirectToAction("List");
+
+        if (shipment.TrackingNumber == model.TrackingNumber)
+            return RedirectToAction("ShipmentDetails", new { id = shipment.Id });
+
+        shipment.TrackingNumber = model.TrackingNumber;
+        await _shipmentService.UpdateShipmentAsync(shipment);
+
+        await _eventPublisher.PublishAsync(new ShipmentTrackingNumberSetEvent(shipment));
+
+        return RedirectToAction("ShipmentDetails", new { id = shipment.Id });
+    }
+
+    [HttpPost, ActionName("ShipmentDetails")]
+    [FormValueRequired("setadmincomment")]
+    [CheckPermission(StandardPermission.Orders.SHIPMENTS_CREATE_EDIT_DELETE)]
+    public virtual async Task<IActionResult> SetShipmentAdminComment(ShipmentModel model)
+    {
+        //try to get a shipment with the specified id
+        var shipment = await _shipmentService.GetShipmentByIdAsync(model.Id);
+        if (shipment == null)
+            return RedirectToAction("List");
+
+        //a vendor should have access only to his products
+        if (await _workContext.GetCurrentVendorAsync() != null && !await HasAccessToShipmentAsync(shipment))
+            return RedirectToAction("List");
+
+        shipment.AdminComment = model.AdminComment;
+        await _shipmentService.UpdateShipmentAsync(shipment);
+
+        return RedirectToAction("ShipmentDetails", new { id = shipment.Id });
+    }
+
+    [HttpPost, ActionName("ShipmentDetails")]
+    [FormValueRequired("setasshipped")]
+    [CheckPermission(StandardPermission.Orders.SHIPMENTS_CREATE_EDIT_DELETE)]
+    public virtual async Task<IActionResult> SetAsShipped(int id)
+    {
+        //try to get a shipment with the specified id
+        var shipment = await _shipmentService.GetShipmentByIdAsync(id);
+        if (shipment == null)
+            return RedirectToAction("List");
+
+        //a vendor should have access only to his products
+        if (await _workContext.GetCurrentVendorAsync() != null && !await HasAccessToShipmentAsync(shipment))
+            return RedirectToAction("List");
+
+        try
+        {
+            await _orderProcessingService.ShipAsync(shipment, true);
+            await LogEditOrderAsync(shipment.OrderId);
+            return RedirectToAction("ShipmentDetails", new { id = shipment.Id });
+        }
+        catch (Exception exc)
+        {
+            //error
+            await _notificationService.ErrorNotificationAsync(exc);
+            return RedirectToAction("ShipmentDetails", new { id = shipment.Id });
+        }
+    }
+
+    [HttpPost, ActionName("ShipmentDetails")]
+    [FormValueRequired("saveshippeddate")]
+    [CheckPermission(StandardPermission.Orders.SHIPMENTS_CREATE_EDIT_DELETE)]
+    public virtual async Task<IActionResult> EditShippedDate(ShipmentModel model)
+    {
+        //try to get a shipment with the specified id
+        var shipment = await _shipmentService.GetShipmentByIdAsync(model.Id);
+        if (shipment == null)
+            return RedirectToAction("List");
+
+        //a vendor should have access only to his products
+        if (await _workContext.GetCurrentVendorAsync() != null && !await HasAccessToShipmentAsync(shipment))
+            return RedirectToAction("List");
+
+        try
+        {
+            if (!model.ShippedDateUtc.HasValue)
             {
-                shipment
-            };
+                throw new Exception("Enter shipped date");
+            }
 
+            shipment.ShippedDateUtc = model.ShippedDateUtc;
+            await _shipmentService.UpdateShipmentAsync(shipment);
+            return RedirectToAction("ShipmentDetails", new { id = shipment.Id });
+        }
+        catch (Exception exc)
+        {
+            //error
+            await _notificationService.ErrorNotificationAsync(exc);
+            return RedirectToAction("ShipmentDetails", new { id = shipment.Id });
+        }
+    }
+
+    [HttpPost, ActionName("ShipmentDetails")]
+    [FormValueRequired("setasreadyforpickup")]
+    [CheckPermission(StandardPermission.Orders.SHIPMENTS_CREATE_EDIT_DELETE)]
+    public virtual async Task<IActionResult> SetAsReadyForPickup(int id)
+    {
+        //try to get a shipment with the specified id
+        var shipment = await _shipmentService.GetShipmentByIdAsync(id);
+        if (shipment == null)
+            return RedirectToAction("List");
+
+        //a vendor should have access only to his products
+        if (await _workContext.GetCurrentVendorAsync() != null && !await HasAccessToShipmentAsync(shipment))
+            return RedirectToAction("List");
+
+        try
+        {
+            await _orderProcessingService.ReadyForPickupAsync(shipment, true);
+            await LogEditOrderAsync(shipment.OrderId);
+            return RedirectToAction("ShipmentDetails", new { id = shipment.Id });
+        }
+        catch (Exception exc)
+        {
+            //error
+            await _notificationService.ErrorNotificationAsync(exc);
+            return RedirectToAction("ShipmentDetails", new { id = shipment.Id });
+        }
+    }
+
+    [HttpPost, ActionName("ShipmentDetails")]
+    [FormValueRequired("savereadyforpickupdate")]
+    [CheckPermission(StandardPermission.Orders.SHIPMENTS_CREATE_EDIT_DELETE)]
+    public virtual async Task<IActionResult> EditReadyForPickupDate(ShipmentModel model)
+    {
+        //try to get a shipment with the specified id
+        var shipment = await _shipmentService.GetShipmentByIdAsync(model.Id);
+        if (shipment == null)
+            return RedirectToAction("List");
+
+        //a vendor should have access only to his products
+        if (await _workContext.GetCurrentVendorAsync() != null && !await HasAccessToShipmentAsync(shipment))
+            return RedirectToAction("List");
+
+        try
+        {
+            if (!model.ReadyForPickupDateUtc.HasValue)
+                throw new Exception("Enter ready for pickup date");
+
+            shipment.ReadyForPickupDateUtc = model.ReadyForPickupDateUtc;
+            await _shipmentService.UpdateShipmentAsync(shipment);
+            return RedirectToAction("ShipmentDetails", new { id = shipment.Id });
+        }
+        catch (Exception exc)
+        {
+            await _notificationService.ErrorNotificationAsync(exc);
+            return RedirectToAction("ShipmentDetails", new { id = shipment.Id });
+        }
+    }
+
+    [HttpPost, ActionName("ShipmentDetails")]
+    [FormValueRequired("setasdelivered")]
+    [CheckPermission(StandardPermission.Orders.SHIPMENTS_CREATE_EDIT_DELETE)]
+    public virtual async Task<IActionResult> SetAsDelivered(int id)
+    {
+        //try to get a shipment with the specified id
+        var shipment = await _shipmentService.GetShipmentByIdAsync(id);
+        if (shipment == null)
+            return RedirectToAction("List");
+
+        //a vendor should have access only to his products
+        if (await _workContext.GetCurrentVendorAsync() != null && !await HasAccessToShipmentAsync(shipment))
+            return RedirectToAction("List");
+
+        try
+        {
+            await _orderProcessingService.DeliverAsync(shipment, true);
+            await LogEditOrderAsync(shipment.OrderId);
+            return RedirectToAction("ShipmentDetails", new { id = shipment.Id });
+        }
+        catch (Exception exc)
+        {
+            //error
+            await _notificationService.ErrorNotificationAsync(exc);
+            return RedirectToAction("ShipmentDetails", new { id = shipment.Id });
+        }
+    }
+
+    [HttpPost, ActionName("ShipmentDetails")]
+    [FormValueRequired("savedeliverydate")]
+    [CheckPermission(StandardPermission.Orders.SHIPMENTS_CREATE_EDIT_DELETE)]
+    public virtual async Task<IActionResult> EditDeliveryDate(ShipmentModel model)
+    {
+        //try to get a shipment with the specified id
+        var shipment = await _shipmentService.GetShipmentByIdAsync(model.Id);
+        if (shipment == null)
+            return RedirectToAction("List");
+
+        //a vendor should have access only to his products
+        if (await _workContext.GetCurrentVendorAsync() != null && !await HasAccessToShipmentAsync(shipment))
+            return RedirectToAction("List");
+
+        try
+        {
+            if (!model.DeliveryDateUtc.HasValue)
+            {
+                throw new Exception("Enter delivery date");
+            }
+
+            shipment.DeliveryDateUtc = model.DeliveryDateUtc;
+            await _shipmentService.UpdateShipmentAsync(shipment);
+            return RedirectToAction("ShipmentDetails", new { id = shipment.Id });
+        }
+        catch (Exception exc)
+        {
+            //error
+            await _notificationService.ErrorNotificationAsync(exc);
+            return RedirectToAction("ShipmentDetails", new { id = shipment.Id });
+        }
+    }
+
+    [CheckPermission(StandardPermission.Orders.SHIPMENTS_VIEW)]
+    public virtual async Task<IActionResult> PdfPackagingSlip(int shipmentId)
+    {
+        //try to get a shipment with the specified id
+        var shipment = await _shipmentService.GetShipmentByIdAsync(shipmentId);
+        if (shipment == null)
+            return RedirectToAction("List");
+
+        //a vendor should have access only to his products
+        if (await _workContext.GetCurrentVendorAsync() != null && !await HasAccessToShipmentAsync(shipment))
+            return RedirectToAction("List");
+
+        byte[] bytes;
+        await using (var stream = new MemoryStream())
+        {
+            await _pdfService.PrintPackagingSlipToPdfAsync(stream, shipment, _orderSettings.GeneratePdfInvoiceInCustomerLanguage ? null : await _workContext.GetWorkingLanguageAsync());
+            bytes = stream.ToArray();
+        }
+
+        return File(bytes, MimeTypes.ApplicationPdf, $"packagingslip_{shipment.Id}.pdf");
+    }
+
+    [HttpPost, ActionName("ShipmentList")]
+    [FormValueRequired("exportpackagingslips-all")]
+    [CheckPermission(StandardPermission.Orders.SHIPMENTS_VIEW)]
+    public virtual async Task<IActionResult> PdfPackagingSlipAll(ShipmentSearchModel model)
+    {
+        var startDateValue = model.StartDate == null ? null
+            : (DateTime?)_dateTimeHelper.ConvertToUtcTime(model.StartDate.Value, await _dateTimeHelper.GetCurrentTimeZoneAsync());
+
+        var endDateValue = model.EndDate == null ? null
+            : (DateTime?)_dateTimeHelper.ConvertToUtcTime(model.EndDate.Value, await _dateTimeHelper.GetCurrentTimeZoneAsync()).AddDays(1);
+
+        //a vendor should have access only to his products
+        var currentVendor = await _workContext.GetCurrentVendorAsync();
+        var vendorId = 0;
+        if (currentVendor != null)
+            vendorId = currentVendor.Id;
+
+        //load shipments
+        var shipments = await _shipmentService.GetAllShipmentsAsync(vendorId: vendorId,
+            warehouseId: model.WarehouseId,
+            shippingCountryId: model.CountryId,
+            shippingStateId: model.StateProvinceId,
+            shippingCounty: model.County,
+            shippingCity: model.City,
+            trackingNumber: model.TrackingNumber,
+            loadNotShipped: model.LoadNotShipped,
+            loadNotReadyForPickup: model.LoadNotReadyForPickup,
+            createdFromUtc: startDateValue,
+            createdToUtc: endDateValue);
+
+        //ensure that we at least one shipment selected
+        if (!shipments.Any())
+        {
+            _notificationService.ErrorNotification(await _localizationService.GetResourceAsync("Admin.Orders.Shipments.NoShipmentsSelected"));
+            return RedirectToAction("ShipmentList");
+        }
+
+        try
+        {
             byte[] bytes;
-            using (var stream = new MemoryStream())
+            await using (var stream = new MemoryStream())
             {
-                _pdfService.PrintPackagingSlipsToPdf(stream, shipments, _orderSettings.GeneratePdfInvoiceInCustomerLanguage ? 0 : _workContext.WorkingLanguage.Id);
+                await _pdfService.PrintPackagingSlipsToPdfAsync(stream, shipments, _orderSettings.GeneratePdfInvoiceInCustomerLanguage ? null : await _workContext.GetWorkingLanguageAsync());
                 bytes = stream.ToArray();
             }
 
-            return File(bytes, MimeTypes.ApplicationPdf, $"packagingslip_{shipment.Id}.pdf");
+            return File(bytes, "application/zip", "packagingslips.zip");
         }
-
-        [HttpPost, ActionName("ShipmentList")]
-        [FormValueRequired("exportpackagingslips-all")]
-        public virtual IActionResult PdfPackagingSlipAll(ShipmentSearchModel model)
+        catch (Exception exc)
         {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageOrders))
-                return AccessDeniedView();
-
-            var startDateValue = model.StartDate == null ? null
-                            : (DateTime?)_dateTimeHelper.ConvertToUtcTime(model.StartDate.Value, _dateTimeHelper.CurrentTimeZone);
-
-            var endDateValue = model.EndDate == null ? null
-                            : (DateTime?)_dateTimeHelper.ConvertToUtcTime(model.EndDate.Value, _dateTimeHelper.CurrentTimeZone).AddDays(1);
-
-            //a vendor should have access only to his products
-            var vendorId = 0;
-            if (_workContext.CurrentVendor != null)
-                vendorId = _workContext.CurrentVendor.Id;
-
-            //load shipments
-            var shipments = _shipmentService.GetAllShipments(vendorId: vendorId,
-                warehouseId: model.WarehouseId,
-                shippingCountryId: model.CountryId,
-                shippingStateId: model.StateProvinceId,
-                shippingCounty: model.County,
-                shippingCity: model.City,
-                trackingNumber: model.TrackingNumber,
-                loadNotShipped: model.LoadNotShipped,
-                createdFromUtc: startDateValue,
-                createdToUtc: endDateValue);
-
-            //ensure that we at least one shipment selected
-            if (!shipments.Any())
-            {
-                _notificationService.ErrorNotification(_localizationService.GetResource("Admin.Orders.Shipments.NoShipmentsSelected"));
-                return RedirectToAction("ShipmentList");
-            }
-
-            try
-            {
-                byte[] bytes;
-                using (var stream = new MemoryStream())
-                {
-                    _pdfService.PrintPackagingSlipsToPdf(stream, shipments, _orderSettings.GeneratePdfInvoiceInCustomerLanguage ? 0 : _workContext.WorkingLanguage.Id);
-                    bytes = stream.ToArray();
-                }
-
-                return File(bytes, MimeTypes.ApplicationPdf, "packagingslips.pdf");
-            }
-            catch (Exception exc)
-            {
-                _notificationService.ErrorNotification(exc);
-                return RedirectToAction("ShipmentList");
-            }
+            await _notificationService.ErrorNotificationAsync(exc);
+            return RedirectToAction("ShipmentList");
         }
-
-        [HttpPost]
-        public virtual IActionResult PdfPackagingSlipSelected(string selectedIds)
-        {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageOrders))
-                return AccessDeniedView();
-
-            var shipments = new List<Shipment>();
-            if (selectedIds != null)
-            {
-                var ids = selectedIds
-                    .Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
-                    .Select(x => Convert.ToInt32(x))
-                    .ToArray();
-                shipments.AddRange(_shipmentService.GetShipmentsByIds(ids));
-            }
-            //a vendor should have access only to his products
-            if (_workContext.CurrentVendor != null)
-            {
-                shipments = shipments.Where(HasAccessToShipment).ToList();
-            }
-
-            try
-            {
-                byte[] bytes;
-                using (var stream = new MemoryStream())
-                {
-                    _pdfService.PrintPackagingSlipsToPdf(stream, shipments, _orderSettings.GeneratePdfInvoiceInCustomerLanguage ? 0 : _workContext.WorkingLanguage.Id);
-                    bytes = stream.ToArray();
-                }
-
-                return File(bytes, MimeTypes.ApplicationPdf, "packagingslips.pdf");
-            }
-            catch (Exception exc)
-            {
-                _notificationService.ErrorNotification(exc);
-                return RedirectToAction("ShipmentList");
-            }
-        }
-
-        [HttpPost]
-        public virtual IActionResult SetAsShippedSelected(ICollection<int> selectedIds)
-        {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageOrders))
-                return AccessDeniedView();
-
-            var shipments = new List<Shipment>();
-            if (selectedIds != null)
-            {
-                shipments.AddRange(_shipmentService.GetShipmentsByIds(selectedIds.ToArray()));
-            }
-            //a vendor should have access only to his products
-            if (_workContext.CurrentVendor != null)
-            {
-                shipments = shipments.Where(HasAccessToShipment).ToList();
-            }
-
-            foreach (var shipment in shipments)
-            {
-                try
-                {
-                    _orderProcessingService.Ship(shipment, true);
-                }
-                catch
-                {
-                    //ignore any exception
-                }
-            }
-
-            return Json(new { Result = true });
-        }
-
-        [HttpPost]
-        public virtual IActionResult SetAsDeliveredSelected(ICollection<int> selectedIds)
-        {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageOrders))
-                return AccessDeniedView();
-
-            var shipments = new List<Shipment>();
-            if (selectedIds != null)
-            {
-                shipments.AddRange(_shipmentService.GetShipmentsByIds(selectedIds.ToArray()));
-            }
-            //a vendor should have access only to his products
-            if (_workContext.CurrentVendor != null)
-            {
-                shipments = shipments.Where(HasAccessToShipment).ToList();
-            }
-
-            foreach (var shipment in shipments)
-            {
-                try
-                {
-                    _orderProcessingService.Deliver(shipment, true);
-                }
-                catch
-                {
-                    //ignore any exception
-                }
-            }
-
-            return Json(new { Result = true });
-        }
-
-        #endregion
-
-        #region Order notes
-
-        [HttpPost]
-        public virtual IActionResult OrderNotesSelect(OrderNoteSearchModel searchModel)
-        {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageOrders))
-                return AccessDeniedDataTablesJson();
-
-            //try to get an order with the specified id
-            var order = _orderService.GetOrderById(searchModel.OrderId)
-                ?? throw new ArgumentException("No order found with the specified id");
-
-            //a vendor does not have access to this functionality
-            if (_workContext.CurrentVendor != null)
-                return Content(string.Empty);
-
-            //prepare model
-            var model = _orderModelFactory.PrepareOrderNoteListModel(searchModel, order);
-
-            return Json(model);
-        }
-
-        public virtual IActionResult OrderNoteAdd(int orderId, int downloadId, bool displayToCustomer, string message)
-        {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageOrders))
-                return AccessDeniedView();
-
-            if (string.IsNullOrEmpty(message))
-                return ErrorJson(_localizationService.GetResource("Admin.Orders.OrderNotes.Fields.Note.Validation"));
-
-            //try to get an order with the specified id
-            var order = _orderService.GetOrderById(orderId);
-            if (order == null)
-                return ErrorJson("Order cannot be loaded");
-
-            //a vendor does not have access to this functionality
-            if (_workContext.CurrentVendor != null)
-                return ErrorJson("No access for vendors");
-
-            var orderNote = new OrderNote
-            {
-                OrderId = order.Id,
-                DisplayToCustomer = displayToCustomer,
-                Note = message,
-                DownloadId = downloadId,
-                CreatedOnUtc = DateTime.UtcNow
-            };
-
-            _orderService.InsertOrderNote(orderNote);
-
-            //new order notification
-            if (displayToCustomer)
-            {
-                //email
-                _workflowMessageService.SendNewOrderNoteAddedCustomerNotification(orderNote, _workContext.WorkingLanguage.Id);
-            }
-
-            return Json(new { Result = true });
-        }
-
-        [HttpPost]
-        public virtual IActionResult OrderNoteDelete(int id, int orderId)
-        {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageOrders))
-                return AccessDeniedView();
-
-            //try to get an order with the specified id
-            _ = _orderService.GetOrderById(orderId)
-                ?? throw new ArgumentException("No order found with the specified id");
-
-            //a vendor does not have access to this functionality
-            if (_workContext.CurrentVendor != null)
-                return RedirectToAction("Edit", "Order", new { id = orderId });
-
-            //try to get an order note with the specified id
-            var orderNote = _orderService.GetOrderNoteById(id)
-                ?? throw new ArgumentException("No order note found with the specified id");
-
-            _orderService.DeleteOrderNote(orderNote);
-
-            return new NullJsonResult();
-        }
-
-        #endregion
-
-        #region Reports
-
-        [HttpPost]
-        public virtual IActionResult BestsellersBriefReportByQuantityList(BestsellerBriefSearchModel searchModel)
-        {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageOrders))
-                return AccessDeniedDataTablesJson();
-
-            //prepare model
-            var model = _orderModelFactory.PrepareBestsellerBriefListModel(searchModel);
-
-            return Json(model);
-        }
-
-        [HttpPost]
-        public virtual IActionResult BestsellersBriefReportByAmountList(BestsellerBriefSearchModel searchModel)
-        {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageOrders))
-                return AccessDeniedDataTablesJson();
-
-            //prepare model
-            var model = _orderModelFactory.PrepareBestsellerBriefListModel(searchModel);
-
-            return Json(model);
-        }
-
-        [HttpPost]
-        public virtual IActionResult OrderAverageReportList(OrderAverageReportSearchModel searchModel)
-        {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageOrders))
-                return AccessDeniedDataTablesJson();
-
-            //a vendor doesn't have access to this report
-            if (_workContext.CurrentVendor != null)
-                return Content(string.Empty);
-
-            //prepare model
-            var model = _orderModelFactory.PrepareOrderAverageReportListModel(searchModel);
-
-            return Json(model);
-        }
-
-        [HttpPost]
-        public virtual IActionResult OrderIncompleteReportList(OrderIncompleteReportSearchModel searchModel)
-        {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageOrders))
-                return AccessDeniedDataTablesJson();
-
-            //a vendor doesn't have access to this report
-            if (_workContext.CurrentVendor != null)
-                return Content(string.Empty);
-
-            //prepare model
-            var model = _orderModelFactory.PrepareOrderIncompleteReportListModel(searchModel);
-
-            return Json(model);
-        }
-
-        public virtual IActionResult LoadOrderStatistics(string period)
-        {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageOrders))
-                return Content(string.Empty);
-
-            //a vendor doesn't have access to this report
-            if (_workContext.CurrentVendor != null)
-                return Content(string.Empty);
-
-            var result = new List<object>();
-
-            var nowDt = _dateTimeHelper.ConvertToUserTime(DateTime.Now);
-            var timeZone = _dateTimeHelper.CurrentTimeZone;
-
-            var culture = new CultureInfo(_workContext.WorkingLanguage.LanguageCulture);
-
-            switch (period)
-            {
-                case "year":
-                    //year statistics
-                    var yearAgoDt = nowDt.AddYears(-1).AddMonths(1);
-                    var searchYearDateUser = new DateTime(yearAgoDt.Year, yearAgoDt.Month, 1);
-                    for (var i = 0; i <= 12; i++)
-                    {
-                        result.Add(new
-                        {
-                            date = searchYearDateUser.Date.ToString("Y", culture),
-                            value = _orderService.SearchOrders(
-                                createdFromUtc: _dateTimeHelper.ConvertToUtcTime(searchYearDateUser, timeZone),
-                                createdToUtc: _dateTimeHelper.ConvertToUtcTime(searchYearDateUser.AddMonths(1), timeZone),
-                                pageIndex: 0,
-                                pageSize: 1, getOnlyTotalCount: true).TotalCount.ToString()
-                        });
-
-                        searchYearDateUser = searchYearDateUser.AddMonths(1);
-                    }
-
-                    break;
-                case "month":
-                    //month statistics
-                    var monthAgoDt = nowDt.AddDays(-30);
-                    var searchMonthDateUser = new DateTime(monthAgoDt.Year, monthAgoDt.Month, monthAgoDt.Day);
-                    for (var i = 0; i <= 30; i++)
-                    {
-                        result.Add(new
-                        {
-                            date = searchMonthDateUser.Date.ToString("M", culture),
-                            value = _orderService.SearchOrders(
-                                createdFromUtc: _dateTimeHelper.ConvertToUtcTime(searchMonthDateUser, timeZone),
-                                createdToUtc: _dateTimeHelper.ConvertToUtcTime(searchMonthDateUser.AddDays(1), timeZone),
-                                pageIndex: 0,
-                                pageSize: 1, getOnlyTotalCount: true).TotalCount.ToString()
-                        });
-
-                        searchMonthDateUser = searchMonthDateUser.AddDays(1);
-                    }
-
-                    break;
-                case "week":
-                default:
-                    //week statistics
-                    var weekAgoDt = nowDt.AddDays(-7);
-                    var searchWeekDateUser = new DateTime(weekAgoDt.Year, weekAgoDt.Month, weekAgoDt.Day);
-                    for (var i = 0; i <= 7; i++)
-                    {
-                        result.Add(new
-                        {
-                            date = searchWeekDateUser.Date.ToString("d dddd", culture),
-                            value = _orderService.SearchOrders(
-                                createdFromUtc: _dateTimeHelper.ConvertToUtcTime(searchWeekDateUser, timeZone),
-                                createdToUtc: _dateTimeHelper.ConvertToUtcTime(searchWeekDateUser.AddDays(1), timeZone),
-                                pageIndex: 0,
-                                pageSize: 1, getOnlyTotalCount: true).TotalCount.ToString()
-                        });
-
-                        searchWeekDateUser = searchWeekDateUser.AddDays(1);
-                    }
-
-                    break;
-            }
-
-            return Json(result);
-        }
-
-        #endregion
     }
+
+    [HttpPost]
+    [CheckPermission(StandardPermission.Orders.SHIPMENTS_VIEW)]
+    public virtual async Task<IActionResult> PdfPackagingSlipSelected(string selectedIds)
+    {
+        var shipments = new List<Shipment>();
+        if (selectedIds != null)
+        {
+            var ids = selectedIds
+                .Split(_separator, StringSplitOptions.RemoveEmptyEntries)
+                .Select(x => Convert.ToInt32(x))
+                .ToArray();
+            shipments.AddRange(await _shipmentService.GetShipmentsByIdsAsync(ids));
+        }
+        //a vendor should have access only to his products
+        if (await _workContext.GetCurrentVendorAsync() != null)
+        {
+            shipments = await shipments.WhereAwait(HasAccessToShipmentAsync).ToListAsync();
+        }
+
+        try
+        {
+            byte[] bytes;
+            await using (var stream = new MemoryStream())
+            {
+                await _pdfService.PrintPackagingSlipsToPdfAsync(stream, shipments, _orderSettings.GeneratePdfInvoiceInCustomerLanguage ? null : await _workContext.GetWorkingLanguageAsync());
+                bytes = stream.ToArray();
+            }
+
+            return File(bytes, "application/zip", "packagingslips.zip");
+        }
+        catch (Exception exc)
+        {
+            await _notificationService.ErrorNotificationAsync(exc);
+            return RedirectToAction("ShipmentList");
+        }
+    }
+
+    [HttpPost]
+    [CheckPermission(StandardPermission.Orders.SHIPMENTS_CREATE_EDIT_DELETE)]
+    public virtual async Task<IActionResult> SetAsShippedSelected(ICollection<int> selectedIds)
+    {
+        if (selectedIds == null || !selectedIds.Any())
+            return NoContent();
+
+        var shipments = await _shipmentService.GetShipmentsByIdsAsync(selectedIds.ToArray());
+
+        //a vendor should have access only to his products
+        if (await _workContext.GetCurrentVendorAsync() != null)
+        {
+            shipments = await shipments.WhereAwait(HasAccessToShipmentAsync).ToListAsync();
+        }
+
+        foreach (var shipment in shipments)
+        {
+            try
+            {
+                await _orderProcessingService.ShipAsync(shipment, true);
+            }
+            catch
+            {
+                //ignore any exception
+            }
+        }
+
+        return Json(new { Result = true });
+    }
+
+    [HttpPost]
+    [CheckPermission(StandardPermission.Orders.SHIPMENTS_CREATE_EDIT_DELETE)]
+    public virtual async Task<IActionResult> SetAsReadyForPickupSelected(ICollection<int> selectedIds)
+    {
+        if (selectedIds == null || !selectedIds.Any())
+            return NoContent();
+
+        var shipments = await _shipmentService.GetShipmentsByIdsAsync(selectedIds.ToArray());
+
+        //a vendor should have access only to his products
+        if (await _workContext.GetCurrentVendorAsync() != null)
+        {
+            shipments = await shipments.WhereAwait(HasAccessToShipmentAsync).ToListAsync();
+        }
+
+        foreach (var shipment in shipments)
+        {
+            try
+            {
+                await _orderProcessingService.ReadyForPickupAsync(shipment, true);
+            }
+            catch
+            {
+                //ignore any exception
+            }
+        }
+
+        return Json(new { Result = true });
+    }
+
+    [HttpPost]
+    [CheckPermission(StandardPermission.Orders.SHIPMENTS_CREATE_EDIT_DELETE)]
+    public virtual async Task<IActionResult> SetAsDeliveredSelected(ICollection<int> selectedIds)
+    {
+        if (selectedIds == null || !selectedIds.Any())
+            return NoContent();
+
+        var shipments = await _shipmentService.GetShipmentsByIdsAsync(selectedIds.ToArray());
+
+        //a vendor should have access only to his products
+        if (await _workContext.GetCurrentVendorAsync() != null)
+        {
+            shipments = await shipments.WhereAwait(HasAccessToShipmentAsync).ToListAsync();
+        }
+
+        foreach (var shipment in shipments)
+        {
+            try
+            {
+                await _orderProcessingService.DeliverAsync(shipment, true);
+            }
+            catch
+            {
+                //ignore any exception
+            }
+        }
+
+        return Json(new { Result = true });
+    }
+
+    #endregion
+
+    #region Order notes
+
+    [HttpPost]
+    [CheckPermission(StandardPermission.Orders.ORDERS_VIEW)]
+    public virtual async Task<IActionResult> OrderNotesSelect(OrderNoteSearchModel searchModel)
+    {
+        //try to get an order with the specified id
+        var order = await _orderService.GetOrderByIdAsync(searchModel.OrderId)
+            ?? throw new ArgumentException("No order found with the specified id");
+
+        //a vendor does not have access to this functionality
+        if (await _workContext.GetCurrentVendorAsync() != null)
+            return Content(string.Empty);
+
+        //prepare model
+        var model = await _orderModelFactory.PrepareOrderNoteListModelAsync(searchModel, order);
+
+        return Json(model);
+    }
+
+    [CheckPermission(StandardPermission.Orders.ORDERS_CREATE_EDIT_DELETE)]
+    public virtual async Task<IActionResult> OrderNoteAdd(int orderId, int downloadId, bool displayToCustomer, string message)
+    {
+        if (string.IsNullOrEmpty(message))
+            return ErrorJson(await _localizationService.GetResourceAsync("Admin.Orders.OrderNotes.Fields.Note.Validation"));
+
+        //try to get an order with the specified id
+        var order = await _orderService.GetOrderByIdAsync(orderId);
+        if (order == null)
+            return ErrorJson("Order cannot be loaded");
+
+        //a vendor does not have access to this functionality
+        if (await _workContext.GetCurrentVendorAsync() != null)
+            return ErrorJson("No access for vendors");
+
+        var orderNote = new OrderNote
+        {
+            OrderId = order.Id,
+            DisplayToCustomer = displayToCustomer,
+            Note = message,
+            DownloadId = downloadId,
+            CreatedOnUtc = DateTime.UtcNow
+        };
+
+        await _orderService.InsertOrderNoteAsync(orderNote);
+
+        //new order notification
+        if (displayToCustomer)
+        {
+            //email
+            await _workflowMessageService.SendNewOrderNoteAddedCustomerNotificationAsync(orderNote, (await _workContext.GetWorkingLanguageAsync()).Id);
+        }
+
+        return Json(new { Result = true });
+    }
+
+    [HttpPost]
+    [CheckPermission(StandardPermission.Orders.ORDERS_CREATE_EDIT_DELETE)]
+    public virtual async Task<IActionResult> OrderNoteDelete(int id, int orderId)
+    {
+        //try to get an order with the specified id
+        _ = await _orderService.GetOrderByIdAsync(orderId)
+            ?? throw new ArgumentException("No order found with the specified id");
+
+        //a vendor does not have access to this functionality
+        if (await _workContext.GetCurrentVendorAsync() != null)
+            return RedirectToAction("Edit", "Order", new { id = orderId });
+
+        //try to get an order note with the specified id
+        var orderNote = await _orderService.GetOrderNoteByIdAsync(id)
+            ?? throw new ArgumentException("No order note found with the specified id");
+
+        await _orderService.DeleteOrderNoteAsync(orderNote);
+
+        return new NullJsonResult();
+    }
+
+    #endregion
+
+    #region Reports
+
+    [HttpPost]
+    [CheckPermission(StandardPermission.Orders.ORDERS_VIEW)]
+    public virtual async Task<IActionResult> BestsellersBriefReportByQuantityList(BestsellerBriefSearchModel searchModel)
+    {
+        //prepare model
+        var model = await _orderModelFactory.PrepareBestsellerBriefListModelAsync(searchModel);
+
+        return Json(model);
+    }
+
+    [HttpPost]
+    [CheckPermission(StandardPermission.Orders.ORDERS_VIEW)]
+    public virtual async Task<IActionResult> BestsellersBriefReportByAmountList(BestsellerBriefSearchModel searchModel)
+    {
+        //prepare model
+        var model = await _orderModelFactory.PrepareBestsellerBriefListModelAsync(searchModel);
+
+        return Json(model);
+    }
+
+    [HttpPost]
+    [CheckPermission(StandardPermission.Orders.ORDERS_VIEW)]
+    public virtual async Task<IActionResult> OrderAverageReportList(OrderAverageReportSearchModel searchModel)
+    {
+        //a vendor doesn't have access to this report
+        if (await _workContext.GetCurrentVendorAsync() != null)
+            return Content(string.Empty);
+
+        //prepare model
+        var model = await _orderModelFactory.PrepareOrderAverageReportListModelAsync(searchModel);
+
+        return Json(model);
+    }
+
+    [HttpPost]
+    [CheckPermission(StandardPermission.Orders.ORDERS_VIEW)]
+    public virtual async Task<IActionResult> OrderIncompleteReportList(OrderIncompleteReportSearchModel searchModel)
+    {
+        //a vendor doesn't have access to this report
+        if (await _workContext.GetCurrentVendorAsync() != null)
+            return Content(string.Empty);
+
+        //prepare model
+        var model = await _orderModelFactory.PrepareOrderIncompleteReportListModelAsync(searchModel);
+
+        return Json(model);
+    }
+
+    [CheckPermission(StandardPermission.Orders.ORDERS_VIEW)]
+    public virtual async Task<IActionResult> LoadOrderStatistics(string period)
+    {
+        //a vendor doesn't have access to this report
+        if (await _workContext.GetCurrentVendorAsync() != null)
+            return Content(string.Empty);
+
+        var result = new List<object>();
+
+        var nowDt = await _dateTimeHelper.ConvertToUserTimeAsync(DateTime.Now);
+        var timeZone = await _dateTimeHelper.GetCurrentTimeZoneAsync();
+
+        var culture = new CultureInfo((await _workContext.GetWorkingLanguageAsync()).LanguageCulture);
+
+        switch (period)
+        {
+            case "year":
+                //year statistics
+                var yearAgoDt = nowDt.AddYears(-1).AddMonths(1);
+                var searchYearDateUser = new DateTime(yearAgoDt.Year, yearAgoDt.Month, 1);
+                for (var i = 0; i <= 12; i++)
+                {
+                    result.Add(new
+                    {
+                        date = searchYearDateUser.Date.ToString("Y", culture),
+                        value = (await _orderService.SearchOrdersAsync(
+                            createdFromUtc: _dateTimeHelper.ConvertToUtcTime(searchYearDateUser, timeZone),
+                            createdToUtc: _dateTimeHelper.ConvertToUtcTime(searchYearDateUser.AddMonths(1), timeZone),
+                            pageIndex: 0,
+                            pageSize: 1, getOnlyTotalCount: true)).TotalCount.ToString()
+                    });
+
+                    searchYearDateUser = searchYearDateUser.AddMonths(1);
+                }
+
+                break;
+            case "month":
+                //month statistics
+                var monthAgoDt = nowDt.AddDays(-30);
+                var searchMonthDateUser = new DateTime(monthAgoDt.Year, monthAgoDt.Month, monthAgoDt.Day);
+                for (var i = 0; i <= 30; i++)
+                {
+                    result.Add(new
+                    {
+                        date = searchMonthDateUser.Date.ToString("M", culture),
+                        value = (await _orderService.SearchOrdersAsync(
+                            createdFromUtc: _dateTimeHelper.ConvertToUtcTime(searchMonthDateUser, timeZone),
+                            createdToUtc: _dateTimeHelper.ConvertToUtcTime(searchMonthDateUser.AddDays(1), timeZone),
+                            pageIndex: 0,
+                            pageSize: 1, getOnlyTotalCount: true)).TotalCount.ToString()
+                    });
+
+                    searchMonthDateUser = searchMonthDateUser.AddDays(1);
+                }
+
+                break;
+            case "week":
+            default:
+                //week statistics
+                var weekAgoDt = nowDt.AddDays(-7);
+                var searchWeekDateUser = new DateTime(weekAgoDt.Year, weekAgoDt.Month, weekAgoDt.Day);
+                for (var i = 0; i <= 7; i++)
+                {
+                    result.Add(new
+                    {
+                        date = searchWeekDateUser.Date.ToString("d dddd", culture),
+                        value = (await _orderService.SearchOrdersAsync(
+                            createdFromUtc: _dateTimeHelper.ConvertToUtcTime(searchWeekDateUser, timeZone),
+                            createdToUtc: _dateTimeHelper.ConvertToUtcTime(searchWeekDateUser.AddDays(1), timeZone),
+                            pageIndex: 0,
+                            pageSize: 1, getOnlyTotalCount: true)).TotalCount.ToString()
+                    });
+
+                    searchWeekDateUser = searchWeekDateUser.AddDays(1);
+                }
+
+                break;
+        }
+
+        return Json(result);
+    }
+
+    #endregion
 }

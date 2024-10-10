@@ -1,54 +1,66 @@
-﻿using System;
-using Microsoft.AspNetCore.Authentication;
+﻿using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Nop.Services.Authentication;
 
-namespace Nop.Web.Framework.Mvc.Filters
+namespace Nop.Web.Framework.Mvc.Filters;
+
+/// <summary>
+/// Represents filter attribute that sign out from the external authentication scheme
+/// </summary>
+public sealed class SignOutFromExternalAuthenticationAttribute : TypeFilterAttribute
 {
+    #region Ctor
+
     /// <summary>
-    /// Represents filter attribute that sign out from the external authentication scheme
+    /// Create instance of the filter attribute
     /// </summary>
-    public sealed class SignOutFromExternalAuthenticationAttribute : TypeFilterAttribute
+    public SignOutFromExternalAuthenticationAttribute() : base(typeof(SignOutFromExternalAuthenticationFilter))
     {
-        #region Ctor
+    }
+
+    #endregion
+
+    #region Nested filter
+
+    /// <summary>
+    /// Represents a filter that sign out from the external authentication scheme
+    /// </summary>
+    private class SignOutFromExternalAuthenticationFilter : IAsyncAuthorizationFilter
+    {
+        #region Utilities
 
         /// <summary>
-        /// Create instance of the filter attribute
+        /// Called early in the filter pipeline to confirm request is authorized
         /// </summary>
-        public SignOutFromExternalAuthenticationAttribute() : base(typeof(SignOutFromExternalAuthenticationFilter))
+        /// <param name="context">Authorization filter context</param>
+        /// <returns>A task that represents the asynchronous operation</returns>
+        private async Task SignOutFromExternalAuthenticationAsync(AuthorizationFilterContext context)
         {
+            ArgumentNullException.ThrowIfNull(context);
+
+            //sign out from the external authentication scheme
+            var authenticateResult = await context.HttpContext.AuthenticateAsync(NopAuthenticationDefaults.ExternalAuthenticationScheme);
+            if (authenticateResult.Succeeded)
+                await context.HttpContext.SignOutAsync(NopAuthenticationDefaults.ExternalAuthenticationScheme);
         }
 
         #endregion
 
-        #region Nested filter
+        #region Methods
 
         /// <summary>
-        /// Represents a filter that sign out from the external authentication scheme
+        /// Called early in the filter pipeline to confirm request is authorized
         /// </summary>
-        private class SignOutFromExternalAuthenticationFilter : IAuthorizationFilter
+        /// <param name="context">Authorization filter context</param>
+        /// <returns>A task that represents the asynchronous operation</returns>
+        public async Task OnAuthorizationAsync(AuthorizationFilterContext context)
         {
-            #region Methods
-
-            /// <summary>
-            /// Called early in the filter pipeline to confirm request is authorized
-            /// </summary>
-            /// <param name="filterContext">Authorization filter context</param>
-            public async void OnAuthorization(AuthorizationFilterContext filterContext)
-            {
-                if (filterContext == null)
-                    throw new ArgumentNullException(nameof(filterContext));
-
-                //sign out from the external authentication scheme
-                var authenticateResult = await filterContext.HttpContext.AuthenticateAsync(NopAuthenticationDefaults.ExternalAuthenticationScheme);
-                if (authenticateResult.Succeeded)
-                    await filterContext.HttpContext.SignOutAsync(NopAuthenticationDefaults.ExternalAuthenticationScheme);
-            }
-
-            #endregion
+            await SignOutFromExternalAuthenticationAsync(context);
         }
 
         #endregion
     }
+
+    #endregion
 }

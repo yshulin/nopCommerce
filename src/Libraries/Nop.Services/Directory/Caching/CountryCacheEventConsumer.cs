@@ -1,20 +1,22 @@
-﻿using Nop.Core.Domain.Directory;
+﻿using Nop.Core.Caching;
+using Nop.Core.Domain.Directory;
 using Nop.Services.Caching;
 
-namespace Nop.Services.Directory.Caching
+namespace Nop.Services.Directory.Caching;
+
+/// <summary>
+/// Represents a country cache event consumer
+/// </summary>
+public partial class CountryCacheEventConsumer : CacheEventConsumer<Country>
 {
     /// <summary>
-    /// Represents a country cache event consumer
+    /// Clear cache by entity event type
     /// </summary>
-    public partial class CountryCacheEventConsumer : CacheEventConsumer<Country>
+    /// <param name="entity">Entity</param>
+    /// <param name="entityEventType">Entity event type</param>
+    /// <returns>A task that represents the asynchronous operation</returns>
+    protected override async Task ClearCacheAsync(Country entity, EntityEventType entityEventType)
     {
-        /// <summary>
-        /// Clear cache data
-        /// </summary>
-        /// <param name="entity">Entity</param>
-        protected override void ClearCache(Country entity)
-        {
-            RemoveByPrefix(NopDirectoryDefaults.CountriesPrefixCacheKey);
-        }
+        await RemoveByPrefixAsync(NopEntityCacheDefaults<Country>.Prefix);
     }
 }

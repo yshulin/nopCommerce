@@ -1,56 +1,50 @@
-using System.Linq;
+﻿using FluentValidation;
 using FluentValidation.Validators;
 
-namespace Nop.Web.Framework.Validators
+namespace Nop.Web.Framework.Validators;
+
+/// <summary>
+/// Credit card validator
+/// </summary>
+public partial class CreditCardPropertyValidator<T, TProperty> : PropertyValidator<T, TProperty>
 {
+    public override string Name => "CreditCardPropertyValidator";
+
     /// <summary>
-    /// Credit card validator
+    /// Is valid?
     /// </summary>
-    public class CreditCardPropertyValidator : PropertyValidator
+    /// <param name="context">Validation context</param>
+    /// <returns>Result</returns>
+    public override bool IsValid(ValidationContext<T> context, TProperty value)
     {
-        /// <summary>
-        /// Ctor
-        /// </summary>
-        public CreditCardPropertyValidator()
-            : base("Credit card number is not valid")
-        {
+        var ccValue = value as string;
+        if (string.IsNullOrWhiteSpace(ccValue))
+            return false;
 
-        }
+        ccValue = ccValue.Replace(" ", "");
+        ccValue = ccValue.Replace("-", "");
 
-        /// <summary>
-        /// Is valid?
-        /// </summary>
-        /// <param name="context">Validation context</param>
-        /// <returns>Result</returns>
-        protected override bool IsValid(PropertyValidatorContext context)
+        var checksum = 0;
+        var evenDigit = false;
+
+        //http://www.beachnet.com/~hstiles/cardtype.html
+        foreach (var digit in ccValue.Reverse())
         {
-            var ccValue = context.PropertyValue as string;
-            if (string.IsNullOrWhiteSpace(ccValue))
+            if (!char.IsDigit(digit))
                 return false;
 
-            ccValue = ccValue.Replace(" ", "");
-            ccValue = ccValue.Replace("-", "");
+            var digitValue = (digit - '0') * (evenDigit ? 2 : 1);
+            evenDigit = !evenDigit;
 
-            var checksum = 0;
-            var evenDigit = false;
-
-            //http://www.beachnet.com/~hstiles/cardtype.html
-            foreach (var digit in ccValue.Reverse())
+            while (digitValue > 0)
             {
-                if (!char.IsDigit(digit))
-                    return false;
-
-                var digitValue = (digit - '0') * (evenDigit ? 2 : 1);
-                evenDigit = !evenDigit;
-
-                while (digitValue > 0)
-                {
-                    checksum += digitValue % 10;
-                    digitValue /= 10;
-                }
+                checksum += digitValue % 10;
+                digitValue /= 10;
             }
-
-            return (checksum % 10) == 0;
         }
+
+        return (checksum % 10) == 0;
     }
+
+    protected override string GetDefaultMessageTemplate(string errorCode) => "Credit card number is not valid";
 }

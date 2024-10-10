@@ -1,254 +1,220 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using Nop.Core;
+﻿using Nop.Core;
+using Nop.Core.Caching;
 using Nop.Core.Domain.Common;
-using Nop.Core.Infrastructure;
 using Nop.Data;
-using Nop.Services.Caching;
-using Nop.Services.Caching.Extensions;
-using Nop.Services.Events;
 
-namespace Nop.Services.Common
+namespace Nop.Services.Common;
+
+/// <summary>
+/// Generic attribute service
+/// </summary>
+public partial class GenericAttributeService : IGenericAttributeService
 {
-    /// <summary>
-    /// Generic attribute service
-    /// </summary>
-    public partial class GenericAttributeService : IGenericAttributeService
+    #region Fields
+
+    protected readonly IRepository<GenericAttribute> _genericAttributeRepository;
+    protected readonly IShortTermCacheManager _shortTermCacheManager;
+    protected readonly IStaticCacheManager _staticCacheManager;
+
+    #endregion
+
+    #region Ctor
+
+    public GenericAttributeService(IRepository<GenericAttribute> genericAttributeRepository,
+        IShortTermCacheManager shortTermCacheManager,
+        IStaticCacheManager staticCacheManager)
     {
-        #region Fields
+        _genericAttributeRepository = genericAttributeRepository;
+        _shortTermCacheManager = shortTermCacheManager;
+        _staticCacheManager = staticCacheManager;
+    }
 
-        private readonly IEventPublisher _eventPublisher;
-        private readonly IRepository<GenericAttribute> _genericAttributeRepository;
+    #endregion
 
-        #endregion
+    #region Methods
 
-        #region Ctor
+    /// <summary>
+    /// Deletes an attribute
+    /// </summary>
+    /// <param name="attribute">Attribute</param>
+    /// <returns>A task that represents the asynchronous operation</returns>
+    public virtual async Task DeleteAttributeAsync(GenericAttribute attribute)
+    {
+        await _genericAttributeRepository.DeleteAsync(attribute);
+    }
 
-        public GenericAttributeService(IEventPublisher eventPublisher,
-            IRepository<GenericAttribute> genericAttributeRepository)
+    /// <summary>
+    /// Deletes an attributes
+    /// </summary>
+    /// <param name="attributes">Attributes</param>
+    /// <returns>A task that represents the asynchronous operation</returns>
+    public virtual async Task DeleteAttributesAsync(IList<GenericAttribute> attributes)
+    {
+        await _genericAttributeRepository.DeleteAsync(attributes);
+    }
+
+    /// <summary>
+    /// Inserts an attribute
+    /// </summary>
+    /// <param name="attribute">attribute</param>
+    /// <returns>A task that represents the asynchronous operation</returns>
+    public virtual async Task InsertAttributeAsync(GenericAttribute attribute)
+    {
+        ArgumentNullException.ThrowIfNull(attribute);
+
+        attribute.CreatedOrUpdatedDateUTC = DateTime.UtcNow;
+
+        await _genericAttributeRepository.InsertAsync(attribute);
+    }
+
+    /// <summary>
+    /// Updates the attribute
+    /// </summary>
+    /// <param name="attribute">Attribute</param>
+    /// <returns>A task that represents the asynchronous operation</returns>
+    public virtual async Task UpdateAttributeAsync(GenericAttribute attribute)
+    {
+        ArgumentNullException.ThrowIfNull(attribute);
+
+        attribute.CreatedOrUpdatedDateUTC = DateTime.UtcNow;
+
+        await _genericAttributeRepository.UpdateAsync(attribute);
+    }
+
+    /// <summary>
+    /// Get attributes
+    /// </summary>
+    /// <param name="entityId">Entity identifier</param>
+    /// <param name="keyGroup">Key group</param>
+    /// <returns>
+    /// A task that represents the asynchronous operation
+    /// The task result contains the get attributes
+    /// </returns>
+    public virtual async Task<IList<GenericAttribute>> GetAttributesForEntityAsync(int entityId, string keyGroup)
+    {
+        var query = from ga in _genericAttributeRepository.Table
+            where ga.EntityId == entityId &&
+                  ga.KeyGroup == keyGroup
+            select ga;
+        var attributes = await _shortTermCacheManager.GetAsync(async () => await query.ToListAsync(), NopCommonDefaults.GenericAttributeCacheKey, entityId, keyGroup);
+
+        return attributes;
+    }
+
+    /// <summary>
+    /// Save attribute value
+    /// </summary>
+    /// <typeparam name="TPropType">Property type</typeparam>
+    /// <param name="entity">Entity</param>
+    /// <param name="key">Key</param>
+    /// <param name="value">Value</param>
+    /// <param name="storeId">Store identifier; pass 0 if this attribute will be available for all stores</param>
+    /// <returns>A task that represents the asynchronous operation</returns>
+    public virtual async Task SaveAttributeAsync<TPropType>(BaseEntity entity, string key, TPropType value, int storeId = 0)
+    {
+        ArgumentNullException.ThrowIfNull(entity);
+
+        ArgumentNullException.ThrowIfNull(key);
+
+        var keyGroup = entity.GetType().Name;
+
+        var props = (await GetAttributesForEntityAsync(entity.Id, keyGroup))
+            .Where(x => x.StoreId == storeId)
+            .ToList();
+        var prop = props.FirstOrDefault(ga =>
+            ga.Key.Equals(key, StringComparison.InvariantCultureIgnoreCase)); //should be culture invariant
+
+        var valueStr = CommonHelper.To<string>(value);
+
+        if (prop != null)
         {
-            _eventPublisher = eventPublisher;
-            _genericAttributeRepository = genericAttributeRepository;
-        }
-
-        #endregion
-
-        #region Methods
-
-        /// <summary>
-        /// Deletes an attribute
-        /// </summary>
-        /// <param name="attribute">Attribute</param>
-        public virtual void DeleteAttribute(GenericAttribute attribute)
-        {
-            if (attribute == null)
-                throw new ArgumentNullException(nameof(attribute));
-
-            _genericAttributeRepository.Delete(attribute);
-            
-            //event notification
-            _eventPublisher.EntityDeleted(attribute);
-        }
-
-        /// <summary>
-        /// Deletes an attributes
-        /// </summary>
-        /// <param name="attributes">Attributes</param>
-        public virtual void DeleteAttributes(IList<GenericAttribute> attributes)
-        {
-            if (attributes == null)
-                throw new ArgumentNullException(nameof(attributes));
-
-            _genericAttributeRepository.Delete(attributes);
-            
-            //event notification
-            foreach (var attribute in attributes)
-            {
-                _eventPublisher.EntityDeleted(attribute);
-            }
-        }
-
-        /// <summary>
-        /// Gets an attribute
-        /// </summary>
-        /// <param name="attributeId">Attribute identifier</param>
-        /// <returns>An attribute</returns>
-        public virtual GenericAttribute GetAttributeById(int attributeId)
-        {
-            if (attributeId == 0)
-                return null;
-
-            return _genericAttributeRepository.GetById(attributeId);
-        }
-
-        /// <summary>
-        /// Inserts an attribute
-        /// </summary>
-        /// <param name="attribute">attribute</param>
-        public virtual void InsertAttribute(GenericAttribute attribute)
-        {
-            if (attribute == null)
-                throw new ArgumentNullException(nameof(attribute));
-
-            attribute.CreatedOrUpdatedDateUTC = DateTime.UtcNow;
-            _genericAttributeRepository.Insert(attribute);
-            
-            //event notification
-            _eventPublisher.EntityInserted(attribute);
-        }
-
-        /// <summary>
-        /// Updates the attribute
-        /// </summary>
-        /// <param name="attribute">Attribute</param>
-        public virtual void UpdateAttribute(GenericAttribute attribute)
-        {
-            if (attribute == null)
-                throw new ArgumentNullException(nameof(attribute));
-
-            attribute.CreatedOrUpdatedDateUTC = DateTime.UtcNow;
-            _genericAttributeRepository.Update(attribute);
-            
-            //event notification
-            _eventPublisher.EntityUpdated(attribute);
-        }
-
-        /// <summary>
-        /// Get attributes
-        /// </summary>
-        /// <param name="entityId">Entity identifier</param>
-        /// <param name="keyGroup">Key group</param>
-        /// <returns>Get attributes</returns>
-        public virtual IList<GenericAttribute> GetAttributesForEntity(int entityId, string keyGroup)
-        {
-            //we cannot inject ICacheKeyService into constructor because it'll cause circular references.
-            //that's why we resolve it here this way
-            var key = EngineContext.Current.Resolve<ICacheKeyService>()
-                .PrepareKeyForShortTermCache(NopCommonDefaults.GenericAttributeCacheKey, entityId, keyGroup);
-            
-            var query = from ga in _genericAttributeRepository.Table
-                where ga.EntityId == entityId &&
-                      ga.KeyGroup == keyGroup
-                select ga;
-            var attributes = query.ToCachedList(key);
-
-            return attributes;
-        }
-
-        /// <summary>
-        /// Save attribute value
-        /// </summary>
-        /// <typeparam name="TPropType">Property type</typeparam>
-        /// <param name="entity">Entity</param>
-        /// <param name="key">Key</param>
-        /// <param name="value">Value</param>
-        /// <param name="storeId">Store identifier; pass 0 if this attribute will be available for all stores</param>
-        public virtual void SaveAttribute<TPropType>(BaseEntity entity, string key, TPropType value, int storeId = 0)
-        {
-            if (entity == null)
-                throw new ArgumentNullException(nameof(entity));
-
-            if (key == null)
-                throw new ArgumentNullException(nameof(key));
-
-            var keyGroup = entity.GetType().Name;
-
-            var props = GetAttributesForEntity(entity.Id, keyGroup)
-                .Where(x => x.StoreId == storeId)
-                .ToList();
-            var prop = props.FirstOrDefault(ga =>
-                ga.Key.Equals(key, StringComparison.InvariantCultureIgnoreCase)); //should be culture invariant
-
-            var valueStr = CommonHelper.To<string>(value);
-
-            if (prop != null)
-            {
-                if (string.IsNullOrWhiteSpace(valueStr))
-                {
-                    //delete
-                    DeleteAttribute(prop);
-                }
-                else
-                {
-                    //update
-                    prop.Value = valueStr;
-                    UpdateAttribute(prop);
-                }
-            }
+            if (string.IsNullOrWhiteSpace(valueStr))
+                //delete
+                await DeleteAttributeAsync(prop);
             else
             {
-                if (string.IsNullOrWhiteSpace(valueStr)) 
-                    return;
-
-                //insert
-                prop = new GenericAttribute
-                {
-                    EntityId = entity.Id,
-                    Key = key,
-                    KeyGroup = keyGroup,
-                    Value = valueStr,
-                    StoreId = storeId
-                };
-
-                InsertAttribute(prop);
+                //update
+                prop.Value = valueStr;
+                await UpdateAttributeAsync(prop);
             }
         }
-
-        /// <summary>
-        /// Get an attribute of an entity
-        /// </summary>
-        /// <typeparam name="TPropType">Property type</typeparam>
-        /// <param name="entity">Entity</param>
-        /// <param name="key">Key</param>
-        /// <param name="storeId">Load a value specific for a certain store; pass 0 to load a value shared for all stores</param>
-        /// <param name="defaultValue">Default value</param>
-        /// <returns>Attribute</returns>
-        public virtual TPropType GetAttribute<TPropType>(BaseEntity entity, string key, int storeId = 0, TPropType defaultValue = default)
+        else
         {
-            if (entity == null)
-                throw new ArgumentNullException(nameof(entity));
+            if (string.IsNullOrWhiteSpace(valueStr))
+                return;
 
-            var keyGroup = entity.GetType().Name;
+            //insert
+            prop = new GenericAttribute
+            {
+                EntityId = entity.Id,
+                Key = key,
+                KeyGroup = keyGroup,
+                Value = valueStr,
+                StoreId = storeId
+            };
 
-            var props = GetAttributesForEntity(entity.Id, keyGroup);
-
-            //little hack here (only for unit testing). we should write expect-return rules in unit tests for such cases
-            if (props == null)
-                return defaultValue;
-
-            props = props.Where(x => x.StoreId == storeId).ToList();
-            if (!props.Any())
-                return defaultValue;
-
-            var prop = props.FirstOrDefault(ga =>
-                ga.Key.Equals(key, StringComparison.InvariantCultureIgnoreCase)); //should be culture invariant
-
-            if (prop == null || string.IsNullOrEmpty(prop.Value))
-                return defaultValue;
-
-            return CommonHelper.To<TPropType>(prop.Value);
+            await InsertAttributeAsync(prop);
         }
-
-        /// <summary>
-        /// Get an attribute of an entity
-        /// </summary>
-        /// <typeparam name="TPropType">Property type</typeparam>
-        /// <typeparam name="TEntity">Entity type</typeparam>
-        /// <param name="entityId">Entity identifier</param>
-        /// <param name="key">Key</param>
-        /// <param name="storeId">Load a value specific for a certain store; pass 0 to load a value shared for all stores</param>
-        /// <param name="defaultValue">Default value</param>
-        /// <returns>Attribute</returns>
-        public virtual TPropType GetAttribute<TEntity, TPropType>(int entityId, string key, int storeId = 0, TPropType defaultValue = default)
-            where TEntity : BaseEntity
-        {
-            var entity = (TEntity)Activator.CreateInstance(typeof(TEntity));
-            entity.Id = entityId;
-
-            return GetAttribute(entity, key, storeId, defaultValue);
-        }
-
-        #endregion
     }
+
+    /// <summary>
+    /// Get an attribute of an entity
+    /// </summary>
+    /// <typeparam name="TPropType">Property type</typeparam>
+    /// <param name="entity">Entity</param>
+    /// <param name="key">Key</param>
+    /// <param name="storeId">Load a value specific for a certain store; pass 0 to load a value shared for all stores</param>
+    /// <param name="defaultValue">Default value</param>
+    /// <returns>
+    /// A task that represents the asynchronous operation
+    /// The task result contains the attribute
+    /// </returns>
+    public virtual async Task<TPropType> GetAttributeAsync<TPropType>(BaseEntity entity, string key, int storeId = 0, TPropType defaultValue = default)
+    {
+        ArgumentNullException.ThrowIfNull(entity);
+
+        var keyGroup = entity.GetType().Name;
+
+        var props = await GetAttributesForEntityAsync(entity.Id, keyGroup);
+
+        //little hack here (only for unit testing). we should write expect-return rules in unit tests for such cases
+        if (props == null)
+            return defaultValue;
+
+        props = props.Where(x => x.StoreId == storeId).ToList();
+        if (!props.Any())
+            return defaultValue;
+
+        var prop = props.FirstOrDefault(ga =>
+            ga.Key.Equals(key, StringComparison.InvariantCultureIgnoreCase)); //should be culture invariant
+
+        if (prop == null || string.IsNullOrEmpty(prop.Value))
+            return defaultValue;
+
+        return CommonHelper.To<TPropType>(prop.Value);
+    }
+
+    /// <summary>
+    /// Get an attribute of an entity
+    /// </summary>
+    /// <typeparam name="TPropType">Property type</typeparam>
+    /// <typeparam name="TEntity">Entity type</typeparam>
+    /// <param name="entityId">Entity identifier</param>
+    /// <param name="key">Key</param>
+    /// <param name="storeId">Load a value specific for a certain store; pass 0 to load a value shared for all stores</param>
+    /// <param name="defaultValue">Default value</param>
+    /// <returns>
+    /// A task that represents the asynchronous operation
+    /// The task result contains the attribute
+    /// </returns>
+    public virtual async Task<TPropType> GetAttributeAsync<TEntity, TPropType>(int entityId, string key, int storeId = 0, TPropType defaultValue = default)
+        where TEntity : BaseEntity
+    {
+        var entity = (TEntity)Activator.CreateInstance(typeof(TEntity));
+        entity.Id = entityId;
+
+        return await GetAttributeAsync(entity, key, storeId, defaultValue);
+    }
+
+    #endregion
 }

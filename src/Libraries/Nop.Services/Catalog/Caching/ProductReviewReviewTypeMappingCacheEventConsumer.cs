@@ -1,23 +1,20 @@
 ﻿using Nop.Core.Domain.Catalog;
 using Nop.Services.Caching;
 
-namespace Nop.Services.Catalog.Caching
+namespace Nop.Services.Catalog.Caching;
+
+/// <summary>
+/// Represents a product review review type cache event consumer
+/// </summary>
+public partial class ProductReviewReviewTypeMappingCacheEventConsumer : CacheEventConsumer<ProductReviewReviewTypeMapping>
 {
     /// <summary>
-    /// Represents a product review review type cache event consumer
+    /// Clear cache data
     /// </summary>
-    public partial class ProductReviewReviewTypeMappingCacheEventConsumer : CacheEventConsumer<ProductReviewReviewTypeMapping>
+    /// <param name="entity">Entity</param>
+    /// <returns>A task that represents the asynchronous operation</returns>
+    protected override async Task ClearCacheAsync(ProductReviewReviewTypeMapping entity)
     {
-        /// <summary>
-        /// Clear cache data
-        /// </summary>
-        /// <param name="entity">Entity</param>
-        protected override void ClearCache(ProductReviewReviewTypeMapping entity)
-        {
-            Remove(NopCatalogDefaults.ReviewTypeAllCacheKey);
-
-            var cacheKey = _cacheKeyService.PrepareKey(NopCatalogDefaults.ProductReviewReviewTypeMappingAllCacheKey, entity.ProductReviewId);
-            Remove(cacheKey);
-        }
+        await RemoveAsync(NopCatalogDefaults.ProductReviewTypeMappingByReviewTypeCacheKey, entity.ProductReviewId);
     }
 }
